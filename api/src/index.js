@@ -138,6 +138,7 @@ async function handleCreateProduct(request, env, headers) {
       product_id: product.id,
       variant_label: cleanText(v.variantLabel, 60),
       sku: cleanText(v.sku, 60) || null,
+      unit: cleanText(v.unit, 20) || 'pcs',
       unit_price: Number(v.unitPrice),
       stock_qty: Number(v.stockQty) || 0,
       low_stock_threshold: Number(v.lowStockThreshold) || 0,
@@ -187,6 +188,7 @@ async function handleUpdateProduct(request, env, headers, id) {
     const row = {
       variant_label: cleanText(v.variantLabel, 60),
       sku: cleanText(v.sku, 60) || null,
+      unit: cleanText(v.unit, 20) || 'pcs',
       unit_price: Number(v.unitPrice),
       stock_qty: Number(v.stockQty) || 0,
       low_stock_threshold: Number(v.lowStockThreshold) || 0,
@@ -267,6 +269,40 @@ async function handleGetInvoice(env, headers, id) {
   return json(invoice, 200, headers)
 }
 
+async function handleDeleteInvoice(env, headers, id, restock) {
+  if (!UUID_RE.test(id)) return json({ error: 'Invalid invoice id' }, 400, headers)
+
+  if (restock) {
+    const itemsRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/invoice_items?invoice_id=eq.${id}&select=variant_id,qty`,
+      { headers: supabaseHeaders(env) },
+    )
+    if (itemsRes.ok) {
+      const items = await itemsRes.json()
+      // Best-effort — the invoice still gets deleted below even if one of
+      // these hiccups, same trade-off as the decrement on creation.
+      await Promise.all(
+        items
+          .filter((it) => it.variant_id)
+          .map((it) =>
+            fetch(`${env.SUPABASE_URL}/rest/v1/rpc/increment_stock`, {
+              method: 'POST',
+              headers: supabaseHeaders(env, { 'Content-Type': 'application/json' }),
+              body: JSON.stringify({ p_variant_id: it.variant_id, p_qty: it.qty }),
+            }).catch(() => {}),
+          ),
+      )
+    }
+  }
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders(env),
+  })
+  if (!res.ok) return json({ error: 'Could not delete invoice' }, 502, headers)
+  return json({ ok: true, restocked: Boolean(restock) }, 200, headers)
+}
+
 async function nextInvoiceNumber(env) {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?select=id`, {
     headers: supabaseHeaders(env, { Prefer: 'count=exact', Range: '0-0' }),
@@ -300,6 +336,7 @@ async function handleCreateInvoice(request, env, headers) {
       variant_id: it.variantId && UUID_RE.test(it.variantId) ? it.variantId : null,
       product_name: productName,
       variant_label: variantLabel,
+      unit: cleanText(it.unit, 20) || 'pcs',
       unit_price: unitPrice,
       qty,
       line_total: Math.round(unitPrice * qty * 100) / 100,
@@ -441,6 +478,9 @@ export default {
     const invoiceMatch = url.pathname.match(/^\/invoices\/([^/]+)$/)
     if (invoiceMatch && request.method === 'GET') {
       return handleGetInvoice(env, headers, invoiceMatch[1])
+    }
+    if (invoiceMatch && request.method === 'DELETE') {
+      return handleDeleteInvoice(env, headers, invoiceMatch[1], url.searchParams.get('restock') === 'true')
     }
     const invoiceStatusMatch = url.pathname.match(/^\/invoices\/([^/]+)\/status$/)
     if (invoiceStatusMatch && request.method === 'PATCH') {

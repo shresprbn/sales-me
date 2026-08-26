@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { downloadInvoicePdf } from '../lib/pdf'
-import { formatMoney } from '../lib/currency'
+import { formatMoney, formatUnitPrice } from '../lib/currency'
 
 export default function NewInvoice() {
   const navigate = useNavigate()
@@ -38,6 +38,7 @@ export default function NewInvoice() {
           variantId: v.id,
           productName: product.name,
           variantLabel: v.variant_label,
+          unit: v.unit || 'pcs',
           unitPrice: Number(v.unit_price),
           stockQty: Number(v.stock_qty),
         })
@@ -60,6 +61,8 @@ export default function NewInvoice() {
       if (existing) {
         return prev.map((it) => (it.variantId === variant.variantId ? { ...it, qty: it.qty + 1 } : it))
       }
+      // Default qty to 1 for piece-y units, 1 for weight/volume too — the user
+      // types the real amount (0.2, 2, etc.) right after adding.
       return [...prev, { key: crypto.randomUUID(), ...variant, qty: 1 }]
     })
     setPickerOpen(false)
@@ -67,7 +70,11 @@ export default function NewInvoice() {
   }
 
   const updateQty = (key, qty) => {
-    setLineItems((prev) => prev.map((it) => (it.key === key ? { ...it, qty: Math.max(1, Number(qty) || 1) } : it)))
+    // Allow fractional quantities (0.2kg, 1.5l, etc.) — only floor out at a
+    // tiny positive minimum so the field never goes to 0/negative/NaN.
+    setLineItems((prev) =>
+      prev.map((it) => (it.key === key ? { ...it, qty: Math.max(0.001, Number(qty) || 0.001) } : it)),
+    )
   }
 
   const removeItem = (key) => {
@@ -97,6 +104,7 @@ export default function NewInvoice() {
           variantId: it.variantId,
           productName: it.productName,
           variantLabel: it.variantLabel,
+          unit: it.unit,
           unitPrice: it.unitPrice,
           qty: it.qty,
         })),
@@ -162,14 +170,18 @@ export default function NewInvoice() {
                   return (
                     <div className="line-item-row" key={it.key}>
                       <span>{it.productName}</span>
-                      <span>{it.variantLabel} · {formatMoney(it.unitPrice)}</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={it.qty}
-                        onChange={(e) => updateQty(it.key, e.target.value)}
-                        style={{ width: 60, border: '1px solid var(--border)', borderRadius: 6, padding: '4px 6px' }}
-                      />
+                      <span>{it.variantLabel} · {formatUnitPrice(it.unitPrice, it.unit)}</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <input
+                          type="number"
+                          min="0.001"
+                          step="any"
+                          value={it.qty}
+                          onChange={(e) => updateQty(it.key, e.target.value)}
+                          style={{ width: 60, border: '1px solid var(--border)', borderRadius: 6, padding: '4px 6px' }}
+                        />
+                        <span style={{ color: 'var(--muted)', fontSize: 12 }}>{it.unit}</span>
+                      </span>
                       <span style={over ? { color: 'var(--danger)' } : undefined}>
                         {formatMoney(it.unitPrice * it.qty)}
                         {over && ' ⚠'}
@@ -237,7 +249,7 @@ export default function NewInvoice() {
                 {filteredVariants.map((v) => (
                   <div className="picker-item" key={v.variantId} onClick={() => addItem(v)}>
                     <span>{v.productName} — {v.variantLabel}</span>
-                    <span className="picker-item-meta">{formatMoney(v.unitPrice)} · {v.stockQty} in stock</span>
+                    <span className="picker-item-meta">{formatUnitPrice(v.unitPrice, v.unit)} · {v.stockQty} {v.unit} in stock</span>
                   </div>
                 ))}
               </div>

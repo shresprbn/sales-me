@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { downloadInvoicePdf } from '../lib/pdf'
-import { formatMoney } from '../lib/currency'
+import { formatMoney, formatUnitPrice } from '../lib/currency'
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
@@ -12,9 +12,12 @@ const STATUSES = ['unpaid', 'paid', 'void']
 
 export default function InvoiceDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [invoice, setInvoice] = useState(null)
   const [status, setStatus] = useState('loading')
   const [updating, setUpdating] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const load = () => {
     setStatus('loading')
@@ -41,6 +44,17 @@ export default function InvoiceDetail() {
     }
   }
 
+  const handleDelete = async (restock) => {
+    setDeleting(true)
+    try {
+      await api.deleteInvoice(id, restock)
+      navigate('/invoices', { replace: true })
+    } catch {
+      window.alert('Could not delete invoice')
+      setDeleting(false)
+    }
+  }
+
   if (status === 'loading') return <p className="empty-state">loading…</p>
   if (status === 'error' || !invoice) return <p className="empty-state">couldn't load that invoice</p>
 
@@ -55,6 +69,9 @@ export default function InvoiceDetail() {
           <Link to="/invoices" className="btn">back to invoices</Link>
           <button type="button" className="btn btn-primary" onClick={() => downloadInvoicePdf(invoice)}>
             download PDF
+          </button>
+          <button type="button" className="btn btn-danger" onClick={() => setDeleteModalOpen(true)}>
+            delete
           </button>
         </div>
       </div>
@@ -79,8 +96,8 @@ export default function InvoiceDetail() {
             {(invoice.invoice_items || []).map((it) => (
               <div className="line-item-row" key={it.id}>
                 <span>{it.product_name}</span>
-                <span>{it.variant_label} · {formatMoney(it.unit_price)}</span>
-                <span>{it.qty}</span>
+                <span>{it.variant_label} · {formatUnitPrice(it.unit_price, it.unit)}</span>
+                <span>{it.qty} {it.unit}</span>
                 <span>{formatMoney(it.line_total)}</span>
                 <span></span>
               </div>
@@ -122,6 +139,28 @@ export default function InvoiceDetail() {
           </div>
         </div>
       </div>
+
+      {deleteModalOpen && (
+        <div className="modal-overlay" onClick={() => !deleting && setDeleteModalOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2 className="modal-title">Delete {invoice.invoice_number}?</h2>
+            <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: -8 }}>
+              This can't be undone. Choose whether to add this invoice's items back to inventory stock.
+            </p>
+            <div className="modal-actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+              <button type="button" className="btn" onClick={() => setDeleteModalOpen(false)} disabled={deleting}>
+                cancel
+              </button>
+              <button type="button" className="btn btn-danger" onClick={() => handleDelete(false)} disabled={deleting}>
+                {deleting ? 'deleting…' : 'delete only'}
+              </button>
+              <button type="button" className="btn btn-danger" onClick={() => handleDelete(true)} disabled={deleting}>
+                {deleting ? 'deleting…' : 'delete & return items to stock'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

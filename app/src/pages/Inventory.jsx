@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
-import { formatMoney } from '../lib/currency'
+import { formatMoney, formatUnitPrice } from '../lib/currency'
+
+const COMMON_UNITS = ['pcs', 'kg', 'g', 'l', 'ml', 'box', 'dozen']
 
 function emptyVariant() {
   return {
@@ -8,6 +10,7 @@ function emptyVariant() {
     id: null,
     variantLabel: '',
     sku: '',
+    unit: 'pcs',
     unitPrice: '',
     stockQty: '',
     lowStockThreshold: '',
@@ -59,6 +62,7 @@ export default function Inventory() {
         id: v.id,
         variantLabel: v.variant_label,
         sku: v.sku || '',
+        unit: v.unit || 'pcs',
         unitPrice: String(v.unit_price),
         stockQty: String(v.stock_qty),
         lowStockThreshold: String(v.low_stock_threshold),
@@ -100,6 +104,7 @@ export default function Inventory() {
         id: v.id || undefined,
         variantLabel: v.variantLabel.trim(),
         sku: v.sku.trim(),
+        unit: v.unit.trim() || 'pcs',
         unitPrice: Number(v.unitPrice),
         stockQty: Number(v.stockQty) || 0,
         lowStockThreshold: Number(v.lowStockThreshold) || 0,
@@ -186,9 +191,9 @@ export default function Inventory() {
                       {i === 0 && <td rowSpan={variants.length}>{product.name}</td>}
                       <td>{v.variant_label}</td>
                       <td>{v.sku || '—'}</td>
-                      <td>{formatMoney(v.unit_price)}</td>
+                      <td>{formatUnitPrice(v.unit_price, v.unit)}</td>
                       <td className={low ? 'stock-low' : ''}>
-                        {v.stock_qty}
+                        {v.stock_qty} {v.unit}
                         {low && <span className="tag tag-low" style={{ marginLeft: 6 }}>low</span>}
                       </td>
                       {i === 0 && (
@@ -243,19 +248,28 @@ export default function Inventory() {
                   </div>
                   <div className="field narrow">
                     <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={v.unitPrice}
-                      onChange={(e) => updateVariantField(v._key, 'unitPrice', e.target.value)}
-                      placeholder="price"
+                      type="text"
+                      list="unit-options"
+                      value={v.unit}
+                      onChange={(e) => updateVariantField(v._key, 'unit', e.target.value)}
+                      placeholder="unit"
                     />
                   </div>
                   <div className="field narrow">
                     <input
                       type="number"
                       min="0"
-                      step="1"
+                      step="0.01"
+                      value={v.unitPrice}
+                      onChange={(e) => updateVariantField(v._key, 'unitPrice', e.target.value)}
+                      placeholder={`price/${v.unit || 'pcs'}`}
+                    />
+                  </div>
+                  <div className="field narrow">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
                       value={v.stockQty}
                       onChange={(e) => updateVariantField(v._key, 'stockQty', e.target.value)}
                       placeholder="stock"
@@ -264,6 +278,11 @@ export default function Inventory() {
                   <button type="button" className="btn btn-sm btn-danger" onClick={() => removeVariantRow(v._key)}>×</button>
                 </div>
               ))}
+              <datalist id="unit-options">
+                {COMMON_UNITS.map((u) => (
+                  <option key={u} value={u} />
+                ))}
+              </datalist>
               <button type="button" className="btn-link" onClick={addVariantRow} style={{ marginBottom: 12 }}>
                 + add variant
               </button>

@@ -90,7 +90,7 @@ export function buildInvoicePdf(invoice) {
     }
     doc.setFont('helvetica', 'normal')
     doc.text(`${item.product_name} — ${item.variant_label}`, marginX + 8, y)
-    doc.text(String(item.qty), 380, y, { align: 'right' })
+    doc.text(`${item.qty} ${item.unit || ''}`.trim(), 380, y, { align: 'right' })
     doc.text(formatMoney(item.unit_price), 460, y, { align: 'right' })
     doc.text(formatMoney(item.line_total), 547 - 8, y, { align: 'right' })
     doc.setDrawColor(235)

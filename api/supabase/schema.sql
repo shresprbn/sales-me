@@ -27,6 +27,12 @@ create table if not exists product_variants (
   product_id uuid not null references products(id) on delete cascade,
   variant_label text not null, -- "1kg", "500g", "Small", etc.
   sku text,
+  -- What unit_price is *per* — "pcs" for a fixed pack/piece, or "kg"/"g"/"l"
+  -- for something sold by loose weight/volume (price per kg, sold as
+  -- however many grams or kilos the customer wants). Free text on purpose,
+  -- purely for display and to size the invoice quantity field sensibly —
+  -- nothing in the backend branches on specific values.
+  unit text not null default 'pcs',
   unit_price numeric(10,2) not null check (unit_price >= 0),
   stock_qty numeric(10,2) not null default 0 check (stock_qty >= 0),
   low_stock_threshold numeric(10,2) not null default 0,
@@ -63,6 +69,7 @@ create table if not exists invoice_items (
   variant_id uuid references product_variants(id) on delete set null,
   product_name text not null,
   variant_label text not null,
+  unit text not null default 'pcs', -- snapshotted alongside price/label, same reasoning
   unit_price numeric(10,2) not null,
   qty numeric(10,2) not null check (qty > 0),
   line_total numeric(10,2) not null
@@ -80,6 +87,18 @@ language sql
 as $$
   update product_variants
   set stock_qty = greatest(0, stock_qty - p_qty),
+      updated_at = now()
+  where id = p_variant_id;
+$$;
+
+-- The reverse of decrement_stock — used when an invoice is deleted and you
+-- choose to put its items back into inventory.
+create or replace function increment_stock(p_variant_id uuid, p_qty numeric)
+returns void
+language sql
+as $$
+  update product_variants
+  set stock_qty = stock_qty + p_qty,
       updated_at = now()
   where id = p_variant_id;
 $$;

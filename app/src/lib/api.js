@@ -43,4 +43,5 @@ export const api = {
   getInvoice: (id) => request(`/invoices/${id}`),
   createInvoice: (body) => request('/invoices', { method: 'POST', body: JSON.stringify(body) }),
   setInvoiceStatus: (id, status) => request(`/invoices/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  deleteInvoice: (id, restock) => request(`/invoices/${id}?restock=${restock ? 'true' : 'false'}`, { method: 'DELETE' }),
 }
