@@ -58,6 +58,25 @@ export default function Stats() {
     }
   }, [invoices])
 
+  const salesByMonth = useMemo(() => {
+    const map = new Map()
+    for (const inv of invoices) {
+      if (inv.status === 'void') continue
+      const d = new Date(inv.created_at)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      const entry = map.get(key) || {
+        key,
+        label: d.toLocaleDateString(undefined, { year: 'numeric', month: 'long' }),
+        invoiceCount: 0,
+        revenue: 0,
+      }
+      entry.invoiceCount += 1
+      entry.revenue += Number(inv.total)
+      map.set(key, entry)
+    }
+    return [...map.values()].sort((a, b) => b.key.localeCompare(a.key))
+  }, [invoices])
+
   const salesByProduct = useMemo(() => {
     const map = new Map()
     for (const it of invoiceItems) {
@@ -185,6 +204,33 @@ export default function Stats() {
               <span className="stat-value">{formatMoney(salesStats.avgInvoice)}</span>
             </div>
           </div>
+
+          <h3 style={{ fontSize: 13, fontWeight: 700, margin: '20px 0 10px' }}>Sales by month</h3>
+          {salesByMonth.length === 0 && <p className="empty-state">No sales yet.</p>}
+          {salesByMonth.length > 0 && (
+            <div className="card" style={{ padding: 0 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Invoices</th>
+                    <th>Revenue</th>
+                    <th>Avg. invoice</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {salesByMonth.map((row) => (
+                    <tr key={row.key}>
+                      <td>{row.label}</td>
+                      <td>{row.invoiceCount}</td>
+                      <td>{formatMoney(row.revenue)}</td>
+                      <td>{formatMoney(row.revenue / row.invoiceCount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <h3 style={{ fontSize: 13, fontWeight: 700, margin: '20px 0 10px' }}>Sales by product</h3>
           {salesByProduct.length === 0 && <p className="empty-state">No sales yet.</p>}
