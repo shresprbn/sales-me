@@ -4,12 +4,27 @@ import { api } from '../lib/api'
 import { downloadInvoicePdf } from '../lib/pdf'
 import { formatMoney, formatUnitPrice } from '../lib/currency'
 
+const WEIGHT_PRESETS = { g: [200, 500, 1000, 2000], kg: [0.2, 0.5, 1, 2] }
+const VOLUME_PRESETS = { ml: [200, 500, 1000, 2000], l: [0.2, 0.5, 1, 2] }
+const WEIGHT_LABELS = ['200g', '500g', '1kg', '2kg']
+const VOLUME_LABELS = ['200ml', '500ml', '1l', '2l']
+const COUNT_PRESETS = [1, 2, 5, 10]
+
+function qtyPresets(unit) {
+  const u = (unit || 'pcs').toLowerCase()
+  if (WEIGHT_PRESETS[u]) return WEIGHT_PRESETS[u].map((value, i) => ({ label: WEIGHT_LABELS[i], value }))
+  if (VOLUME_PRESETS[u]) return VOLUME_PRESETS[u].map((value, i) => ({ label: VOLUME_LABELS[i], value }))
+  return COUNT_PRESETS.map((value) => ({ label: String(value), value }))
+}
+
 export default function NewInvoice() {
   const navigate = useNavigate()
   const [products, setProducts] = useState([])
   const [loadStatus, setLoadStatus] = useState('loading')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [pendingVariant, setPendingVariant] = useState(null)
+  const [pendingQty, setPendingQty] = useState('')
   const [lineItems, setLineItems] = useState([]) // { key, variantId, productName, variantLabel, unitPrice, qty, stockQty }
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -55,18 +70,25 @@ export default function NewInvoice() {
     )
   }, [allVariants, search])
 
-  const addItem = (variant) => {
-    setLineItems((prev) => {
-      const existing = prev.find((it) => it.variantId === variant.variantId)
-      if (existing) {
-        return prev.map((it) => (it.variantId === variant.variantId ? { ...it, qty: it.qty + 1 } : it))
-      }
-      // Default qty to 1 for piece-y units, 1 for weight/volume too — the user
-      // types the real amount (0.2, 2, etc.) right after adding.
-      return [...prev, { key: crypto.randomUUID(), ...variant, qty: 1 }]
-    })
+  const openQtyStep = (variant) => {
     setPickerOpen(false)
     setSearch('')
+    setPendingVariant(variant)
+    setPendingQty('')
+  }
+
+  const confirmAddItem = (e) => {
+    e.preventDefault()
+    const qty = Number(pendingQty)
+    if (!qty || qty <= 0) return
+    setLineItems((prev) => {
+      const existing = prev.find((it) => it.variantId === pendingVariant.variantId)
+      if (existing) {
+        return prev.map((it) => (it.variantId === pendingVariant.variantId ? { ...it, qty: it.qty + qty } : it))
+      }
+      return [...prev, { key: crypto.randomUUID(), ...pendingVariant, qty }]
+    })
+    setPendingVariant(null)
   }
 
   const updateQty = (key, qty) => {
@@ -247,7 +269,7 @@ export default function NewInvoice() {
             {loadStatus === 'ready' && filteredVariants.length > 0 && (
               <div className="picker-list">
                 {filteredVariants.map((v) => (
-                  <div className="picker-item" key={v.variantId} onClick={() => addItem(v)}>
+                  <div className="picker-item" key={v.variantId} onClick={() => openQtyStep(v)}>
                     <span>{v.productName} — {v.variantLabel}</span>
                     <span className="picker-item-meta">{formatUnitPrice(v.unitPrice, v.unit)} · {v.stockQty} {v.unit} in stock</span>
                   </div>
@@ -257,6 +279,58 @@ export default function NewInvoice() {
             <div className="modal-actions">
               <button type="button" className="btn" onClick={() => setPickerOpen(false)}>close</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {pendingVariant && (
+        <div className="modal-overlay" onClick={() => setPendingVariant(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2 className="modal-title">{pendingVariant.productName} — {pendingVariant.variantLabel}</h2>
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: -10, marginBottom: 16 }}>
+              {formatUnitPrice(pendingVariant.unitPrice, pendingVariant.unit)} · {pendingVariant.stockQty} {pendingVariant.unit} in stock
+            </p>
+            <form onSubmit={confirmAddItem}>
+              <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Quick amounts</label>
+              <div className="qty-presets">
+                {qtyPresets(pendingVariant.unit).map((p) => (
+                  <button
+                    type="button"
+                    key={p.label}
+                    className={`btn btn-sm ${Number(pendingQty) === p.value ? 'btn-primary' : ''}`}
+                    onClick={() => setPendingQty(String(p.value))}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="field" style={{ marginTop: 12 }}>
+                <label>Quantity ({pendingVariant.unit})</label>
+                <input
+                  type="number"
+                  min="0.001"
+                  step="any"
+                  autoFocus
+                  value={pendingQty}
+                  onChange={(e) => setPendingQty(e.target.value)}
+                  placeholder={`amount in ${pendingVariant.unit}`}
+                />
+              </div>
+
+              {Number(pendingQty) > 0 && (
+                <p style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  Line total: {formatMoney(Number(pendingQty) * pendingVariant.unitPrice)}
+                </p>
+              )}
+
+              <div className="modal-actions">
+                <button type="button" className="btn" onClick={() => setPendingVariant(null)}>cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={!(Number(pendingQty) > 0)}>
+                  add to invoice
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -210,6 +210,7 @@ tr:last-child td { border-bottom: none; }
 .qty-cell { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .qty-input { width: 60px; min-width: 0; border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
 .qty-unit { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.qty-presets { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .totals-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
 .totals-row.total { font-weight: 700; font-size: 16px; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 10px; }
 .picker-list { max-height: 320px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
