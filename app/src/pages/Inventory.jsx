@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { formatMoney, formatUnitPrice } from '../lib/currency'
 
-const COMMON_UNITS = ['pcs', 'kg', 'g', 'l', 'ml', 'box', 'dozen']
+function normalizeUnit(unit) {
+  return (unit || '').trim().toLowerCase().startsWith('k') ? 'kg' : 'pcs'
+}
 
 function emptyVariant() {
   return {
@@ -62,7 +64,7 @@ export default function Inventory() {
         id: v.id,
         variantLabel: v.variant_label,
         sku: v.sku || '',
-        unit: v.unit || 'pcs',
+        unit: normalizeUnit(v.unit),
         unitPrice: String(v.unit_price),
         stockQty: String(v.stock_qty),
         lowStockThreshold: String(v.low_stock_threshold),
@@ -250,13 +252,22 @@ export default function Inventory() {
                   </div>
                   <div className="field narrow">
                     <label>Unit</label>
-                    <input
-                      type="text"
-                      list="unit-options"
-                      value={v.unit}
-                      onChange={(e) => updateVariantField(v._key, 'unit', e.target.value)}
-                      placeholder="unit"
-                    />
+                    <div className="unit-toggle">
+                      <button
+                        type="button"
+                        className={v.unit === 'pcs' ? 'active' : ''}
+                        onClick={() => updateVariantField(v._key, 'unit', 'pcs')}
+                      >
+                        pcs
+                      </button>
+                      <button
+                        type="button"
+                        className={v.unit === 'kg' ? 'active' : ''}
+                        onClick={() => updateVariantField(v._key, 'unit', 'kg')}
+                      >
+                        kg
+                      </button>
+                    </div>
                   </div>
                   <div className="field narrow">
                     <label>Price/unit</label>
@@ -283,11 +294,6 @@ export default function Inventory() {
                   <button type="button" className="btn btn-sm btn-danger variant-remove" onClick={() => removeVariantRow(v._key)}>×</button>
                 </div>
               ))}
-              <datalist id="unit-options">
-                {COMMON_UNITS.map((u) => (
-                  <option key={u} value={u} />
-                ))}
-              </datalist>
               <button type="button" className="btn-link" onClick={addVariantRow} style={{ marginBottom: 12 }}>
                 + add variant
               </button>

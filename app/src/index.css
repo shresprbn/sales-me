@@ -199,6 +199,18 @@ tr:last-child td { border-bottom: none; }
 .variant-row .field { margin-bottom: 0; flex: 1 1 120px; min-width: 0; }
 .variant-row .field.narrow { flex: 1 1 80px; }
 .variant-row .variant-remove { flex: 0 0 auto; }
+.unit-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.unit-toggle button {
+  flex: 1;
+  border: none;
+  background: #fff;
+  padding: 9px 0;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.unit-toggle button + button { border-left: 1px solid var(--border); }
+.unit-toggle button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .stock-low { color: var(--danger); font-weight: 700; }
 
 /* ── Invoice builder ─────────────────────────────────────── */
