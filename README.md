@@ -88,7 +88,7 @@ This repo already includes `.github/workflows/deploy.yml` and
    to **GitHub Actions**.
 2. In repo Settings → Secrets and variables → Actions, add a secret
    `VITE_API_BASE_URL` set to your deployed Worker's URL (e.g.
-   `https://shop-api.shresprbn.com`).
+`https://shop-api.shresprbn.com`).
 3. Push to `main` — the workflow builds `app/` and deploys `app/dist` to
    Pages automatically.
 4. In your DNS (wherever `shresprbn.com` is managed), add a `CNAME` record
