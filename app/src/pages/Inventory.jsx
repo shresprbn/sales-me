@@ -231,6 +231,7 @@ export default function Inventory() {
               {formVariants.map((v) => (
                 <div className="variant-row" key={v._key}>
                   <div className="field">
+                    <label>Variant</label>
                     <input
                       type="text"
                       value={v.variantLabel}
@@ -239,6 +240,7 @@ export default function Inventory() {
                     />
                   </div>
                   <div className="field narrow">
+                    <label>SKU</label>
                     <input
                       type="text"
                       value={v.sku}
@@ -247,6 +249,7 @@ export default function Inventory() {
                     />
                   </div>
                   <div className="field narrow">
+                    <label>Unit</label>
                     <input
                       type="text"
                       list="unit-options"
@@ -256,6 +259,7 @@ export default function Inventory() {
                     />
                   </div>
                   <div className="field narrow">
+                    <label>Price/unit</label>
                     <input
                       type="number"
                       min="0"
@@ -266,6 +270,7 @@ export default function Inventory() {
                     />
                   </div>
                   <div className="field narrow">
+                    <label>Stock</label>
                     <input
                       type="number"
                       min="0"
@@ -275,7 +280,7 @@ export default function Inventory() {
                       placeholder="stock"
                     />
                   </div>
-                  <button type="button" className="btn btn-sm btn-danger" onClick={() => removeVariantRow(v._key)}>×</button>
+                  <button type="button" className="btn btn-sm btn-danger variant-remove" onClick={() => removeVariantRow(v._key)}>×</button>
                 </div>
               ))}
               <datalist id="unit-options">

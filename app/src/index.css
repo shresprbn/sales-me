@@ -130,11 +130,12 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px;
+  overflow-x: auto;
 }
 .empty-state { color: var(--muted); text-align: center; padding: 40px 20px; }
 
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+table { width: 100%; min-width: 560px; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; white-space: nowrap; }
 th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
 tr:last-child td { border-bottom: none; }
 
@@ -167,7 +168,7 @@ tr:last-child td { border-bottom: none; }
   outline-offset: -1px;
 }
 .field-row { display: flex; gap: 12px; }
-.field-row .field { flex: 1; }
+.field-row .field { flex: 1; min-width: 0; }
 
 /* ── Modal ───────────────────────────────────────────────── */
 .modal-overlay {
@@ -194,9 +195,10 @@ tr:last-child td { border-bottom: none; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 
 /* ── Inventory ───────────────────────────────────────────── */
-.variant-row { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
-.variant-row .field { margin-bottom: 0; flex: 1; }
-.variant-row .field.narrow { flex: 0 0 90px; }
+.variant-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
+.variant-row .field { margin-bottom: 0; flex: 1 1 120px; min-width: 0; }
+.variant-row .field.narrow { flex: 1 1 80px; }
+.variant-row .variant-remove { flex: 0 0 auto; }
 .stock-low { color: var(--danger); font-weight: 700; }
 
 /* ── Invoice builder ─────────────────────────────────────── */
