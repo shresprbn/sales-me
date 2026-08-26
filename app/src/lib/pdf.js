@@ -1,17 +1,14 @@
 import { jsPDF } from 'jspdf'
+import { formatMoney } from './currency'
 
 // Edit this to your actual business details — it's what shows in the
 // letterhead at the top of every generated invoice PDF. Kept as a plain
 // constant on purpose (no settings page/DB table) to keep this lightweight.
 export const BUSINESS_INFO = {
   name: 'Your Business Name',
-  address: 'Your address, City, State, PIN',
-  phone: '+91 00000 00000',
+  address: 'Your address, City',
+  phone: '+977 00-0000000',
   email: 'you@example.com',
-}
-
-function formatMoney(n) {
-  return `Rs. ${Number(n).toFixed(2)}`
 }
 
 function formatDate(iso) {

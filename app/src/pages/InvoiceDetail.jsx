@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { downloadInvoicePdf } from '../lib/pdf'
+import { formatMoney } from '../lib/currency'
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
@@ -78,9 +79,9 @@ export default function InvoiceDetail() {
             {(invoice.invoice_items || []).map((it) => (
               <div className="line-item-row" key={it.id}>
                 <span>{it.product_name}</span>
-                <span>{it.variant_label} · ₹{Number(it.unit_price).toFixed(2)}</span>
+                <span>{it.variant_label} · {formatMoney(it.unit_price)}</span>
                 <span>{it.qty}</span>
-                <span>₹{Number(it.line_total).toFixed(2)}</span>
+                <span>{formatMoney(it.line_total)}</span>
                 <span></span>
               </div>
             ))}
@@ -96,11 +97,11 @@ export default function InvoiceDetail() {
 
         <div className="invoice-side">
           <div className="card">
-            <div className="totals-row"><span>Subtotal</span><span>₹{Number(invoice.subtotal).toFixed(2)}</span></div>
+            <div className="totals-row"><span>Subtotal</span><span>{formatMoney(invoice.subtotal)}</span></div>
             {Number(invoice.tax_percent) > 0 && (
-              <div className="totals-row"><span>Tax ({invoice.tax_percent}%)</span><span>₹{Number(invoice.tax_amount).toFixed(2)}</span></div>
+              <div className="totals-row"><span>Tax ({invoice.tax_percent}%)</span><span>{formatMoney(invoice.tax_amount)}</span></div>
             )}
-            <div className="totals-row total"><span>Total</span><span>₹{Number(invoice.total).toFixed(2)}</span></div>
+            <div className="totals-row total"><span>Total</span><span>{formatMoney(invoice.total)}</span></div>
 
             <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'block', marginTop: 16, marginBottom: 6 }}>
               STATUS

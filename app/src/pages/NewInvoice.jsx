@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { downloadInvoicePdf } from '../lib/pdf'
+import { formatMoney } from '../lib/currency'
 
 export default function NewInvoice() {
   const navigate = useNavigate()
@@ -15,6 +16,7 @@ export default function NewInvoice() {
   const [customerAddress, setCustomerAddress] = useState('')
   const [taxPercent, setTaxPercent] = useState('0')
   const [notes, setNotes] = useState('')
+  const [autoDownload, setAutoDownload] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -99,7 +101,7 @@ export default function NewInvoice() {
           qty: it.qty,
         })),
       })
-      downloadInvoicePdf(invoice)
+      if (autoDownload) downloadInvoicePdf(invoice)
       navigate(`/invoices/${invoice.id}`)
     } catch (err) {
       setError(err.message || 'Could not create invoice')
@@ -113,7 +115,7 @@ export default function NewInvoice() {
       <div className="page-header">
         <div>
           <h1 className="page-title">New invoice</h1>
-          <p className="page-subtitle">Pick items, set a quantity, save — the PDF downloads automatically.</p>
+          <p className="page-subtitle">Pick items, set a quantity, save — the PDF is optional, on or off below.</p>
         </div>
       </div>
 
@@ -160,7 +162,7 @@ export default function NewInvoice() {
                   return (
                     <div className="line-item-row" key={it.key}>
                       <span>{it.productName}</span>
-                      <span>{it.variantLabel} · ₹{it.unitPrice.toFixed(2)}</span>
+                      <span>{it.variantLabel} · {formatMoney(it.unitPrice)}</span>
                       <input
                         type="number"
                         min="1"
@@ -169,7 +171,7 @@ export default function NewInvoice() {
                         style={{ width: 60, border: '1px solid var(--border)', borderRadius: 6, padding: '4px 6px' }}
                       />
                       <span style={over ? { color: 'var(--danger)' } : undefined}>
-                        ₹{(it.unitPrice * it.qty).toFixed(2)}
+                        {formatMoney(it.unitPrice * it.qty)}
                         {over && ' ⚠'}
                       </span>
                       <button type="button" className="btn btn-sm btn-danger" onClick={() => removeItem(it.key)}>×</button>
@@ -192,20 +194,25 @@ export default function NewInvoice() {
               <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
 
-            <div className="totals-row"><span>Subtotal</span><span>₹{subtotal.toFixed(2)}</span></div>
-            {taxPct > 0 && <div className="totals-row"><span>Tax ({taxPct}%)</span><span>₹{taxAmount.toFixed(2)}</span></div>}
-            <div className="totals-row total"><span>Total</span><span>₹{total.toFixed(2)}</span></div>
+            <div className="totals-row"><span>Subtotal</span><span>{formatMoney(subtotal)}</span></div>
+            {taxPct > 0 && <div className="totals-row"><span>Tax ({taxPct}%)</span><span>{formatMoney(taxAmount)}</span></div>}
+            <div className="totals-row total"><span>Total</span><span>{formatMoney(total)}</span></div>
 
             {error && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</p>}
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginTop: 14, cursor: 'pointer' }}>
+              <input type="checkbox" checked={autoDownload} onChange={(e) => setAutoDownload(e.target.checked)} />
+              download PDF after saving
+            </label>
 
             <button
               type="button"
               className="btn btn-primary"
-              style={{ width: '100%', marginTop: 12 }}
+              style={{ width: '100%', marginTop: 10 }}
               onClick={handleSubmit}
               disabled={submitting || lineItems.length === 0}
             >
-              {submitting ? 'saving…' : 'save & download PDF'}
+              {submitting ? 'saving…' : autoDownload ? 'save & download PDF' : 'save invoice'}
             </button>
           </div>
         </div>
@@ -230,7 +237,7 @@ export default function NewInvoice() {
                 {filteredVariants.map((v) => (
                   <div className="picker-item" key={v.variantId} onClick={() => addItem(v)}>
                     <span>{v.productName} — {v.variantLabel}</span>
-                    <span className="picker-item-meta">₹{v.unitPrice.toFixed(2)} · {v.stockQty} in stock</span>
+                    <span className="picker-item-meta">{formatMoney(v.unitPrice)} · {v.stockQty} in stock</span>
                   </div>
                 ))}
               </div>

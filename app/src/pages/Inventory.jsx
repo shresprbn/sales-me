@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
+import { formatMoney } from '../lib/currency'
 
 function emptyVariant() {
   return {
@@ -185,7 +186,7 @@ export default function Inventory() {
                       {i === 0 && <td rowSpan={variants.length}>{product.name}</td>}
                       <td>{v.variant_label}</td>
                       <td>{v.sku || '—'}</td>
-                      <td>₹{Number(v.unit_price).toFixed(2)}</td>
+                      <td>{formatMoney(v.unit_price)}</td>
                       <td className={low ? 'stock-low' : ''}>
                         {v.stock_qty}
                         {low && <span className="tag tag-low" style={{ marginLeft: 6 }}>low</span>}

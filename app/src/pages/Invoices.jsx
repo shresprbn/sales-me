@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
+import { formatMoney } from '../lib/currency'
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
@@ -54,7 +55,7 @@ export default function Invoices() {
                   <td><Link to={`/invoices/${inv.id}`} className="btn-link">{inv.invoice_number}</Link></td>
                   <td>{inv.customer_name || 'Walk-in customer'}</td>
                   <td>{formatDate(inv.created_at)}</td>
-                  <td>₹{Number(inv.total).toFixed(2)}</td>
+                  <td>{formatMoney(inv.total)}</td>
                   <td><span className={`tag tag-${inv.status}`}>{inv.status}</span></td>
                 </tr>
               ))}
