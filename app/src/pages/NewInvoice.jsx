@@ -171,16 +171,16 @@ export default function NewInvoice() {
                     <div className="line-item-row" key={it.key}>
                       <span>{it.productName}</span>
                       <span>{it.variantLabel} · {formatUnitPrice(it.unitPrice, it.unit)}</span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span className="qty-cell">
                         <input
                           type="number"
                           min="0.001"
                           step="any"
                           value={it.qty}
                           onChange={(e) => updateQty(it.key, e.target.value)}
-                          style={{ width: 60, border: '1px solid var(--border)', borderRadius: 6, padding: '4px 6px' }}
+                          className="qty-input"
                         />
-                        <span style={{ color: 'var(--muted)', fontSize: 12 }}>{it.unit}</span>
+                        <span className="qty-unit">{it.unit}</span>
                       </span>
                       <span style={over ? { color: 'var(--danger)' } : undefined}>
                         {formatMoney(it.unitPrice * it.qty)}
