@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { to: '/', label: 'Inventory' },
   { to: '/invoices', label: 'Invoices' },
   { to: '/invoices/new', label: 'New Invoice' },
+  { to: '/stats', label: 'Stats' },
 ]
 
 export default function Layout({ children }) {

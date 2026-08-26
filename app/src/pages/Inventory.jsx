@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
 import { formatMoney, formatUnitPrice } from '../lib/currency'
 
@@ -30,6 +30,7 @@ export default function Inventory() {
   const [removedVariantIds, setRemovedVariantIds] = useState([])
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
+  const [search, setSearch] = useState('')
 
   const load = () => {
     setStatus('loading')
@@ -43,6 +44,18 @@ export default function Inventory() {
   }
 
   useEffect(load, [])
+
+  const filteredProducts = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return products
+    return products.filter((p) => {
+      if (p.name.toLowerCase().includes(q)) return true
+      if ((p.category || '').toLowerCase().includes(q)) return true
+      return (p.product_variants || []).some(
+        (v) => v.variant_label.toLowerCase().includes(q) || (v.sku || '').toLowerCase().includes(q),
+      )
+    })
+  }, [products, search])
 
   const openCreateModal = () => {
     setEditingProduct(null)
@@ -151,13 +164,26 @@ export default function Inventory() {
         </button>
       </div>
 
+      {status === 'ready' && products.length > 0 && (
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="search products, variants, SKU…"
+          style={{ width: '100%', maxWidth: 320, border: '1px solid var(--border)', borderRadius: 8, padding: '9px 11px', marginBottom: 16 }}
+        />
+      )}
+
       {status === 'loading' && <p className="empty-state">loading…</p>}
       {status === 'error' && <p className="empty-state">couldn't load inventory — try refreshing</p>}
       {status === 'ready' && products.length === 0 && (
         <div className="card empty-state">No products yet — add your first one.</div>
       )}
+      {status === 'ready' && products.length > 0 && filteredProducts.length === 0 && (
+        <div className="card empty-state">No products match "{search}".</div>
+      )}
 
-      {status === 'ready' && products.length > 0 && (
+      {status === 'ready' && filteredProducts.length > 0 && (
         <div className="card" style={{ padding: 0 }}>
           <table>
             <thead>
@@ -171,7 +197,7 @@ export default function Inventory() {
               </tr>
             </thead>
             <tbody>
-              {products.map((product) => {
+              {filteredProducts.map((product) => {
                 const variants = product.product_variants || []
                 if (variants.length === 0) {
                   return (

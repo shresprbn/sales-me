@@ -6,6 +6,7 @@ import Inventory from './pages/Inventory'
 import Invoices from './pages/Invoices'
 import NewInvoice from './pages/NewInvoice'
 import InvoiceDetail from './pages/InvoiceDetail'
+import Stats from './pages/Stats'
 
 function Protected({ children }) {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/invoices" element={<Protected><Invoices /></Protected>} />
         <Route path="/invoices/new" element={<Protected><NewInvoice /></Protected>} />
         <Route path="/invoices/:id" element={<Protected><InvoiceDetail /></Protected>} />
+        <Route path="/stats" element={<Protected><Stats /></Protected>} />
       </Routes>
     </BrowserRouter>
   )

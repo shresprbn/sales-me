@@ -213,6 +213,22 @@ tr:last-child td { border-bottom: none; }
 .unit-toggle button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .stock-low { color: var(--danger); font-weight: 700; }
 
+/* ── Stats ───────────────────────────────────────────────── */
+.section-title { font-size: 14px; font-weight: 700; margin: 0 0 12px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.stat-tile {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stat-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.stat-value { font-size: 22px; font-weight: 700; }
+.stat-value.stat-warn { color: var(--danger); }
+
 /* ── Invoice builder ─────────────────────────────────────── */
 .invoice-layout { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
 .invoice-main { flex: 2 1 480px; }
