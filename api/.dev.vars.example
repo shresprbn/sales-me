@@ -1,0 +1,3 @@
+SUPABASE_SERVICE_ROLE_KEY=paste-your-service-role-key-here
+ADMIN_PASSWORD=pick-a-real-password-here
+ADMIN_TOKEN_SECRET=paste-a-long-random-string-here

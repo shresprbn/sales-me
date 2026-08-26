@@ -1,0 +1,9 @@
+name = "sales-me-api"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+[vars]
+# A brand new Supabase project — separate from the one behind
+# shresprbn.com's blog/playground. Create it fresh and paste its URL here.
+SUPABASE_URL = "https://dwthobxwjochvridoleq.supabase.co"
+ALLOWED_ORIGINS = "https://shop.shresprbn.com,http://localhost:5173"
