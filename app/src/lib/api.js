@@ -40,6 +40,7 @@ export const api = {
   deleteVariant: (id) => request(`/variants/${id}`, { method: 'DELETE' }),
 
   listInvoices: () => request('/invoices'),
+  listInvoiceItems: () => request('/invoice-items'),
   getInvoice: (id) => request(`/invoices/${id}`),
   createInvoice: (body) => request('/invoices', { method: 'POST', body: JSON.stringify(body) }),
   setInvoiceStatus: (id, status) => request(`/invoices/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),

@@ -257,6 +257,18 @@ async function handleListInvoices(env, headers) {
   return json(await res.json(), 200, headers)
 }
 
+// Flat feed of every line item ever billed, with the parent invoice's
+// status/date embedded — lets the frontend build a per-product sales
+// breakdown without an N+1 fetch per invoice.
+async function handleListInvoiceItems(env, headers) {
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/invoice_items?select=product_name,variant_label,unit,unit_price,qty,line_total,invoices(status,created_at)`,
+    { headers: supabaseHeaders(env) },
+  )
+  if (!res.ok) return json({ error: 'Could not load invoice items' }, 502, headers)
+  return json(await res.json(), 200, headers)
+}
+
 async function handleGetInvoice(env, headers, id) {
   if (!UUID_RE.test(id)) return json({ error: 'Invalid invoice id' }, 400, headers)
   const res = await fetch(
@@ -471,6 +483,9 @@ export default {
 
     if (url.pathname === '/invoices' && request.method === 'GET') {
       return handleListInvoices(env, headers)
+    }
+    if (url.pathname === '/invoice-items' && request.method === 'GET') {
+      return handleListInvoiceItems(env, headers)
     }
     if (url.pathname === '/invoices' && request.method === 'POST') {
       return handleCreateInvoice(request, env, headers)
