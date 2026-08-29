@@ -556,6 +556,8 @@ async function handleCreatePurchase(request, env, headers) {
     return json({ error: 'A purchase needs a valid product, variant, quantity, and cost price' }, 400, headers)
   }
   const variantId = payload.variantId && UUID_RE.test(payload.variantId) ? payload.variantId : null
+  const sellPrice = Number(payload.sellPrice)
+  const hasSellPrice = Number.isFinite(sellPrice) && sellPrice >= 0
 
   const row = {
     variant_id: variantId,
@@ -591,7 +593,11 @@ async function handleCreatePurchase(request, env, headers) {
       fetch(`${env.SUPABASE_URL}/rest/v1/product_variants?id=eq.${variantId}`, {
         method: 'PATCH',
         headers: supabaseHeaders(env, { 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ purchase_price: costPrice, updated_at: new Date().toISOString() }),
+        body: JSON.stringify({
+          purchase_price: costPrice,
+          ...(hasSellPrice ? { unit_price: sellPrice } : {}),
+          updated_at: new Date().toISOString(),
+        }),
       }).catch(() => {}),
     ])
   }

@@ -24,6 +24,7 @@ export default function Purchases() {
   const [supplier, setSupplier] = useState('')
   const [qty, setQty] = useState('')
   const [costPrice, setCostPrice] = useState('')
+  const [sellPrice, setSellPrice] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
@@ -72,6 +73,7 @@ export default function Purchases() {
           variantLabel: v.variant_label,
           unit: v.unit || 'pcs',
           purchasePrice: Number(v.purchase_price) || 0,
+          unitPrice: Number(v.unit_price) || 0,
         })
       }
     }
@@ -118,6 +120,7 @@ export default function Purchases() {
     setSupplier('')
     setQty('')
     setCostPrice(variant.purchasePrice ? String(variant.purchasePrice) : '')
+    setSellPrice(variant.unitPrice ? String(variant.unitPrice) : '')
     setNotes('')
     setFormError('')
   }
@@ -164,6 +167,7 @@ export default function Purchases() {
           variantLabel: variant.variant_label,
           unit: variant.unit || 'pcs',
           purchasePrice: 0,
+          unitPrice: Number(variant.unit_price) || 0,
         })
       }
     } catch (err) {
@@ -185,6 +189,11 @@ export default function Purchases() {
       setFormError('Enter a valid cost price')
       return
     }
+    const sellNum = sellPrice === '' ? undefined : Number(sellPrice)
+    if (sellNum !== undefined && (!Number.isFinite(sellNum) || sellNum < 0)) {
+      setFormError('Enter a valid sell price, or leave it blank to leave it unchanged')
+      return
+    }
     setSaving(true)
     setFormError('')
     try {
@@ -195,6 +204,7 @@ export default function Purchases() {
         supplier: supplier.trim(),
         qty: qtyNum,
         costPrice: costNum,
+        sellPrice: sellNum,
         notes: notes.trim(),
       })
       setPendingVariant(null)
@@ -345,6 +355,10 @@ export default function Purchases() {
                   <label>Cost price (per {pendingVariant.unit})</label>
                   <input type="number" min="0" step="0.01" value={costPrice} onChange={(e) => setCostPrice(e.target.value)} />
                 </div>
+              </div>
+              <div className="field">
+                <label>Sell price (per {pendingVariant.unit}) — updates inventory</label>
+                <input type="number" min="0" step="0.01" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} />
               </div>
               <div className="field">
                 <label>Supplier (optional)</label>
