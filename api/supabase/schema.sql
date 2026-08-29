@@ -18,6 +18,7 @@ create table if not exists products (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   category text,
+  description text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -33,6 +34,10 @@ create table if not exists product_variants (
   -- purely for display and to size the invoice quantity field sensibly —
   -- nothing in the backend branches on specific values.
   unit text not null default 'pcs',
+  -- What you paid per unit, most recently — updated automatically whenever a
+  -- purchase is logged against this variant. Separate from unit_price
+  -- (what you sell it for).
+  purchase_price numeric(10,2) not null default 0 check (purchase_price >= 0),
   unit_price numeric(10,2) not null check (unit_price >= 0),
   stock_qty numeric(10,2) not null default 0 check (stock_qty >= 0),
   low_stock_threshold numeric(10,2) not null default 0,
@@ -52,6 +57,9 @@ create table if not exists invoices (
   customer_phone text,
   customer_address text,
   subtotal numeric(10,2) not null default 0,
+  discount_type text not null default 'percent' check (discount_type in ('percent', 'flat')),
+  discount_value numeric(10,2) not null default 0,
+  discount_amount numeric(10,2) not null default 0,
   tax_percent numeric(5,2) not null default 0,
   tax_amount numeric(10,2) not null default 0,
   total numeric(10,2) not null default 0,
@@ -76,6 +84,25 @@ create table if not exists invoice_items (
 );
 
 create index if not exists invoice_items_invoice_idx on invoice_items (invoice_id);
+
+-- One row per stock purchase from a supplier. Recording one adds qty to the
+-- variant's stock and updates its purchase_price to this purchase's cost —
+-- same snapshot-plus-side-effect pattern as invoice_items/decrement_stock.
+create table if not exists purchases (
+  id uuid primary key default gen_random_uuid(),
+  variant_id uuid references product_variants(id) on delete set null,
+  product_name text not null,
+  variant_label text not null,
+  supplier text,
+  qty numeric(10,2) not null check (qty > 0),
+  cost_price numeric(10,2) not null check (cost_price >= 0),
+  total_cost numeric(10,2) not null,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists purchases_created_idx on purchases (created_at desc);
+create index if not exists purchases_variant_idx on purchases (variant_id);
 
 -- Called once per line item when an invoice is created, so the stock
 -- decrement happens atomically in the database instead of a
@@ -107,5 +134,6 @@ alter table products enable row level security;
 alter table product_variants enable row level security;
 alter table invoices enable row level security;
 alter table invoice_items enable row level security;
--- No policies on any of the four tables on purpose: anon/authenticated get
+alter table purchases enable row level security;
+-- No policies on any of the five tables on purpose: anon/authenticated get
 -- zero access. Only the Worker's service_role key touches this data.
