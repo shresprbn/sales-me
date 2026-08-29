@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
 import { formatMoney } from '../lib/currency'
+import { qtyPresets } from '../lib/qtyPresets'
 
 const PAGE_SIZE = 20
 
@@ -258,7 +259,21 @@ export default function Purchases() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2 className="modal-title">{pendingVariant.productName} — {pendingVariant.variantLabel}</h2>
             <form onSubmit={handleSubmit}>
-              <div className="field-row">
+              <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Quick amounts</label>
+              <div className="qty-presets">
+                {qtyPresets(pendingVariant.unit).map((p) => (
+                  <button
+                    type="button"
+                    key={p.label}
+                    className="btn btn-sm"
+                    onClick={() => setQty(String(Math.round(((Number(qty) || 0) + p.value) * 1000) / 1000))}
+                  >
+                    +{p.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="field-row" style={{ marginTop: 12 }}>
                 <div className="field">
                   <label>Quantity ({pendingVariant.unit})</label>
                   <input type="number" min="0.001" step="any" autoFocus value={qty} onChange={(e) => setQty(e.target.value)} />

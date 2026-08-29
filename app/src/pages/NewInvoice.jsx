@@ -3,19 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { downloadInvoicePdf } from '../lib/pdf'
 import { formatMoney, formatUnitPrice } from '../lib/currency'
-
-const WEIGHT_PRESETS = { g: [200, 500, 1000, 2000], kg: [0.2, 0.5, 1, 2] }
-const VOLUME_PRESETS = { ml: [200, 500, 1000, 2000], l: [0.2, 0.5, 1, 2], litre: [0.2, 0.5, 1, 2] }
-const WEIGHT_LABELS = ['200g', '500g', '1kg', '2kg']
-const VOLUME_LABELS = ['200ml', '500ml', '1l', '2l']
-const COUNT_PRESETS = [1, 2, 5, 10]
-
-function qtyPresets(unit) {
-  const u = (unit || 'pcs').toLowerCase()
-  if (WEIGHT_PRESETS[u]) return WEIGHT_PRESETS[u].map((value, i) => ({ label: WEIGHT_LABELS[i], value }))
-  if (VOLUME_PRESETS[u]) return VOLUME_PRESETS[u].map((value, i) => ({ label: VOLUME_LABELS[i], value }))
-  return COUNT_PRESETS.map((value) => ({ label: String(value), value }))
-}
+import { qtyPresets } from '../lib/qtyPresets'
 
 export default function NewInvoice() {
   const navigate = useNavigate()
@@ -416,10 +404,10 @@ export default function NewInvoice() {
                   <button
                     type="button"
                     key={p.label}
-                    className={`btn btn-sm ${Number(pendingQty) === p.value ? 'btn-primary' : ''}`}
-                    onClick={() => setPendingQty(String(p.value))}
+                    className="btn btn-sm"
+                    onClick={() => setPendingQty(String(Math.round(((Number(pendingQty) || 0) + p.value) * 1000) / 1000))}
                   >
-                    {p.label}
+                    +{p.label}
                   </button>
                 ))}
               </div>
