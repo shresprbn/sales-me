@@ -118,6 +118,21 @@ export default function NewInvoice() {
     )
   }
 
+  // Both editable — unit price directly, or the line total which backs out
+  // to an equivalent unit price at the current qty. Only one number is ever
+  // actually stored (unitPrice); total is always unitPrice * qty.
+  const updateUnitPrice = (key, price) => {
+    setLineItems((prev) =>
+      prev.map((it) => (it.key === key ? { ...it, unitPrice: Math.max(0, Number(price) || 0) } : it)),
+    )
+  }
+
+  const updateLineTotal = (key, total) => {
+    setLineItems((prev) =>
+      prev.map((it) => (it.key === key ? { ...it, unitPrice: Math.max(0, Number(total) || 0) / it.qty } : it)),
+    )
+  }
+
   const removeItem = (key) => {
     setLineItems((prev) => prev.filter((it) => it.key !== key))
   }
@@ -209,6 +224,7 @@ export default function NewInvoice() {
                   <span>Item</span>
                   <span>Variant</span>
                   <span>Qty</span>
+                  <span>Unit price</span>
                   <span>Total</span>
                   <span></span>
                 </div>
@@ -217,7 +233,7 @@ export default function NewInvoice() {
                   return (
                     <div className="line-item-row" key={it.key}>
                       <span>{it.productName}</span>
-                      <span>{it.variantLabel} · {formatUnitPrice(it.unitPrice, it.unit)}</span>
+                      <span>{it.variantLabel}</span>
                       <span className="qty-cell">
                         <input
                           type="number"
@@ -229,9 +245,26 @@ export default function NewInvoice() {
                         />
                         <span className="qty-unit">{it.unit}</span>
                       </span>
-                      <span style={over ? { color: 'var(--danger)' } : undefined}>
-                        {formatMoney(it.unitPrice * it.qty)}
-                        {over && ' ⚠'}
+                      <span className="qty-cell">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={it.unitPrice}
+                          onChange={(e) => updateUnitPrice(it.key, e.target.value)}
+                          className="qty-input"
+                        />
+                      </span>
+                      <span className="qty-cell">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={Math.round(it.unitPrice * it.qty * 100) / 100}
+                          onChange={(e) => updateLineTotal(it.key, e.target.value)}
+                          className="qty-input"
+                        />
+                        {over && <span style={{ color: 'var(--danger)' }}>⚠</span>}
                       </span>
                       <button type="button" className="btn btn-sm btn-danger" onClick={() => removeItem(it.key)}>×</button>
                     </div>

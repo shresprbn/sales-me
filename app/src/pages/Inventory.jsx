@@ -54,6 +54,18 @@ export default function Inventory() {
 
   useEffect(load, [])
 
+  const lowStockVariants = useMemo(() => {
+    const rows = []
+    for (const p of products) {
+      for (const v of p.product_variants || []) {
+        if (Number(v.stock_qty) <= Number(v.low_stock_threshold)) {
+          rows.push({ ...v, productName: p.name })
+        }
+      }
+    }
+    return rows
+  }, [products])
+
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return products
@@ -177,6 +189,18 @@ export default function Inventory() {
           + add product
         </button>
       </div>
+
+      {status === 'ready' && lowStockVariants.length > 0 && (
+        <div className="alert-banner">
+          <strong>⚠ {lowStockVariants.length} variant{lowStockVariants.length > 1 ? 's' : ''} low on stock:</strong>{' '}
+          {lowStockVariants.map((v, i) => (
+            <span key={v.id}>
+              {i > 0 && ', '}
+              {v.productName} ({v.variant_label}) — {v.stock_qty} {v.unit} left
+            </span>
+          ))}
+        </div>
+      )}
 
       {status === 'ready' && products.length > 0 && (
         <input
@@ -347,6 +371,17 @@ export default function Inventory() {
                       value={v.stockQty}
                       onChange={(e) => updateVariantField(v._key, 'stockQty', e.target.value)}
                       placeholder="stock"
+                    />
+                  </div>
+                  <div className="field narrow">
+                    <label>Low stock at</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={v.lowStockThreshold}
+                      onChange={(e) => updateVariantField(v._key, 'lowStockThreshold', e.target.value)}
+                      placeholder="alert below"
                     />
                   </div>
                   <button type="button" className="btn btn-sm btn-danger variant-remove" onClick={() => removeVariantRow(v._key)}>×</button>
