@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
 import { formatMoney, formatUnitPrice } from '../lib/currency'
+import { UNITS } from '../lib/units'
 
-const UNITS = ['pcs', 'kg', 'litre', 'packet']
 const PAGE_SIZE = 20
 
 function normalizeUnit(unit) {

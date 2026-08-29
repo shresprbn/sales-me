@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
 import { formatMoney } from '../lib/currency'
 import { qtyPresets } from '../lib/qtyPresets'
+import { UNITS } from '../lib/units'
 
 const PAGE_SIZE = 20
 
@@ -26,6 +27,14 @@ export default function Purchases() {
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
+
+  const [newProductModalOpen, setNewProductModalOpen] = useState(false)
+  const [newProductName, setNewProductName] = useState('')
+  const [newVariantLabel, setNewVariantLabel] = useState('')
+  const [newUnit, setNewUnit] = useState('pcs')
+  const [newSellPrice, setNewSellPrice] = useState('')
+  const [creatingProduct, setCreatingProduct] = useState(false)
+  const [newProductError, setNewProductError] = useState('')
 
   const loadPage = (p) => {
     setStatus('loading')
@@ -111,6 +120,57 @@ export default function Purchases() {
     setCostPrice(variant.purchasePrice ? String(variant.purchasePrice) : '')
     setNotes('')
     setFormError('')
+  }
+
+  const openNewProductModal = () => {
+    setPickerOpen(false)
+    setNewProductName(search.trim())
+    setNewVariantLabel('')
+    setNewUnit('pcs')
+    setNewSellPrice('')
+    setNewProductError('')
+    setNewProductModalOpen(true)
+  }
+
+  const handleCreateNewProduct = async (e) => {
+    e.preventDefault()
+    const name = newProductName.trim()
+    const variantLabel = newVariantLabel.trim()
+    const sellPrice = Number(newSellPrice)
+    if (!name || !variantLabel) {
+      setNewProductError('Product name and variant are both required')
+      return
+    }
+    if (!Number.isFinite(sellPrice) || sellPrice < 0) {
+      setNewProductError('Enter a valid sell price')
+      return
+    }
+    setCreatingProduct(true)
+    setNewProductError('')
+    try {
+      const product = await api.createProduct({
+        name,
+        category: '',
+        description: '',
+        variants: [{ variantLabel, unit: newUnit, purchasePrice: 0, unitPrice: sellPrice, stockQty: 0, lowStockThreshold: 0 }],
+      })
+      const variant = (product.product_variants || [])[0]
+      loadProducts()
+      setNewProductModalOpen(false)
+      if (variant) {
+        openDetail({
+          variantId: variant.id,
+          productName: product.name,
+          variantLabel: variant.variant_label,
+          unit: variant.unit || 'pcs',
+          purchasePrice: 0,
+        })
+      }
+    } catch (err) {
+      setNewProductError(err.message || 'Could not create product')
+    } finally {
+      setCreatingProduct(false)
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -218,6 +278,9 @@ export default function Purchases() {
               style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 11px', marginBottom: 12 }}
             />
             {groupedVariants.length === 0 && <p className="empty-state">no matching items</p>}
+            <button type="button" className="btn-link" onClick={openNewProductModal} style={{ marginBottom: 12 }}>
+              + new product{search.trim() ? ` "${search.trim()}"` : ''}
+            </button>
             {groupedVariants.length > 0 && (
               <div className="picker-groups">
                 {groupedVariants.map((group) => {
@@ -304,6 +367,77 @@ export default function Purchases() {
                 <button type="button" className="btn" onClick={() => setPendingVariant(null)} disabled={saving}>cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
                   {saving ? 'saving…' : 'record purchase'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {newProductModalOpen && (
+        <div className="modal-overlay" onClick={() => !creatingProduct && setNewProductModalOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2 className="modal-title">New product</h2>
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: -10, marginBottom: 16 }}>
+              A minimal entry to get this into inventory — edit category, SKU, etc. later from Inventory.
+            </p>
+            <form onSubmit={handleCreateNewProduct}>
+              <div className="field">
+                <label>Product name</label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={newProductName}
+                  onChange={(e) => setNewProductName(e.target.value)}
+                  placeholder="e.g. Fevicol"
+                />
+              </div>
+              <div className="field-row">
+                <div className="field">
+                  <label>Variant</label>
+                  <input
+                    type="text"
+                    value={newVariantLabel}
+                    onChange={(e) => setNewVariantLabel(e.target.value)}
+                    placeholder="e.g. 1kg"
+                  />
+                </div>
+                <div className="field">
+                  <label>Sell price</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={newSellPrice}
+                    onChange={(e) => setNewSellPrice(e.target.value)}
+                    placeholder={`price/${newUnit}`}
+                  />
+                </div>
+              </div>
+              <div className="field">
+                <label>Unit</label>
+                <div className="unit-toggle">
+                  {UNITS.map((u) => (
+                    <button
+                      key={u}
+                      type="button"
+                      className={newUnit === u ? 'active' : ''}
+                      onClick={() => setNewUnit(u)}
+                    >
+                      {u}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {newProductError && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{newProductError}</p>}
+
+              <div className="modal-actions">
+                <button type="button" className="btn" onClick={() => setNewProductModalOpen(false)} disabled={creatingProduct}>
+                  cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={creatingProduct}>
+                  {creatingProduct ? 'creating…' : 'create & continue'}
                 </button>
               </div>
             </form>
