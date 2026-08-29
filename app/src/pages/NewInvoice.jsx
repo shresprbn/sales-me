@@ -5,7 +5,7 @@ import { downloadInvoicePdf } from '../lib/pdf'
 import { formatMoney, formatUnitPrice } from '../lib/currency'
 
 const WEIGHT_PRESETS = { g: [200, 500, 1000, 2000], kg: [0.2, 0.5, 1, 2] }
-const VOLUME_PRESETS = { ml: [200, 500, 1000, 2000], l: [0.2, 0.5, 1, 2] }
+const VOLUME_PRESETS = { ml: [200, 500, 1000, 2000], l: [0.2, 0.5, 1, 2], litre: [0.2, 0.5, 1, 2] }
 const WEIGHT_LABELS = ['200g', '500g', '1kg', '2kg']
 const VOLUME_LABELS = ['200ml', '500ml', '1l', '2l']
 const COUNT_PRESETS = [1, 2, 5, 10]
@@ -29,6 +29,8 @@ export default function NewInvoice() {
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
+  const [discountType, setDiscountType] = useState('percent')
+  const [discountValue, setDiscountValue] = useState('0')
   const [taxPercent, setTaxPercent] = useState('0')
   const [notes, setNotes] = useState('')
   const [autoDownload, setAutoDownload] = useState(true)
@@ -70,6 +72,23 @@ export default function NewInvoice() {
     )
   }, [allVariants, search])
 
+  // Grouped by product so each product's variants sit together in a clearly
+  // separated box, instead of one flat list where they blend together.
+  const groupedVariants = useMemo(() => {
+    const groups = []
+    const byName = new Map()
+    for (const v of filteredVariants) {
+      let group = byName.get(v.productName)
+      if (!group) {
+        group = { productName: v.productName, variants: [] }
+        byName.set(v.productName, group)
+        groups.push(group)
+      }
+      group.variants.push(v)
+    }
+    return groups
+  }, [filteredVariants])
+
   const openQtyStep = (variant) => {
     setPickerOpen(false)
     setSearch('')
@@ -104,9 +123,13 @@ export default function NewInvoice() {
   }
 
   const subtotal = lineItems.reduce((sum, it) => sum + it.unitPrice * it.qty, 0)
+  const discountValueNum = Math.max(0, Number(discountValue) || 0)
+  const discountAmount =
+    discountType === 'percent' ? subtotal * (Math.min(100, discountValueNum) / 100) : Math.min(discountValueNum, subtotal)
+  const discounted = subtotal - discountAmount
   const taxPct = Math.max(0, Math.min(100, Number(taxPercent) || 0))
-  const taxAmount = subtotal * (taxPct / 100)
-  const total = subtotal + taxAmount
+  const taxAmount = discounted * (taxPct / 100)
+  const total = discounted + taxAmount
 
   const handleSubmit = async () => {
     if (!lineItems.length) {
@@ -120,6 +143,8 @@ export default function NewInvoice() {
         customerName,
         customerPhone,
         customerAddress,
+        discountType,
+        discountValue: discountValueNum,
         taxPercent: taxPct,
         notes,
         items: lineItems.map((it) => ({
@@ -220,6 +245,34 @@ export default function NewInvoice() {
         <div className="invoice-side">
           <div className="card">
             <div className="field">
+              <label>Discount</label>
+              <div className="discount-row">
+                <div className="unit-toggle discount-type-toggle">
+                  <button
+                    type="button"
+                    className={discountType === 'percent' ? 'active' : ''}
+                    onClick={() => setDiscountType('percent')}
+                  >
+                    %
+                  </button>
+                  <button
+                    type="button"
+                    className={discountType === 'flat' ? 'active' : ''}
+                    onClick={() => setDiscountType('flat')}
+                  >
+                    Rs.
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="field">
               <label>Tax %</label>
               <input type="number" min="0" max="100" step="0.01" value={taxPercent} onChange={(e) => setTaxPercent(e.target.value)} />
             </div>
@@ -229,6 +282,9 @@ export default function NewInvoice() {
             </div>
 
             <div className="totals-row"><span>Subtotal</span><span>{formatMoney(subtotal)}</span></div>
+            {discountAmount > 0 && (
+              <div className="totals-row"><span>Discount</span><span>-{formatMoney(discountAmount)}</span></div>
+            )}
             {taxPct > 0 && <div className="totals-row"><span>Tax ({taxPct}%)</span><span>{formatMoney(taxAmount)}</span></div>}
             <div className="totals-row total"><span>Total</span><span>{formatMoney(total)}</span></div>
 
@@ -267,11 +323,18 @@ export default function NewInvoice() {
             {loadStatus === 'loading' && <p className="empty-state">loading…</p>}
             {loadStatus === 'ready' && filteredVariants.length === 0 && <p className="empty-state">no matching items</p>}
             {loadStatus === 'ready' && filteredVariants.length > 0 && (
-              <div className="picker-list">
-                {filteredVariants.map((v) => (
-                  <div className="picker-item" key={v.variantId} onClick={() => openQtyStep(v)}>
-                    <span>{v.productName} — {v.variantLabel}</span>
-                    <span className="picker-item-meta">{formatUnitPrice(v.unitPrice, v.unit)} · {v.stockQty} {v.unit} in stock</span>
+              <div className="picker-groups">
+                {groupedVariants.map((group) => (
+                  <div className="picker-group" key={group.productName}>
+                    <div className="picker-group-title">{group.productName}</div>
+                    <div className="picker-list">
+                      {group.variants.map((v) => (
+                        <div className="picker-item" key={v.variantId} onClick={() => openQtyStep(v)}>
+                          <span>{v.variantLabel}</span>
+                          <span className="picker-item-meta">{formatUnitPrice(v.unitPrice, v.unit)} · {v.stockQty} {v.unit} in stock</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>

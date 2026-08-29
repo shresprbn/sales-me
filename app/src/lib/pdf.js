@@ -105,6 +105,15 @@ export function buildInvoicePdf(invoice) {
   doc.setTextColor(20)
   doc.text(formatMoney(invoice.subtotal), 547 - 8, y, { align: 'right' })
 
+  if (Number(invoice.discount_amount) > 0) {
+    y += 16
+    doc.setTextColor(90)
+    const label = invoice.discount_type === 'percent' ? `Discount (${invoice.discount_value}%)` : 'Discount'
+    doc.text(label, totalsX, y, { align: 'right' })
+    doc.setTextColor(20)
+    doc.text(`-${formatMoney(invoice.discount_amount)}`, 547 - 8, y, { align: 'right' })
+  }
+
   if (Number(invoice.tax_percent) > 0) {
     y += 16
     doc.setTextColor(90)

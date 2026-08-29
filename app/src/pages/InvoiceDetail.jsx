@@ -115,6 +115,12 @@ export default function InvoiceDetail() {
         <div className="invoice-side">
           <div className="card">
             <div className="totals-row"><span>Subtotal</span><span>{formatMoney(invoice.subtotal)}</span></div>
+            {Number(invoice.discount_amount) > 0 && (
+              <div className="totals-row">
+                <span>Discount {invoice.discount_type === 'percent' ? `(${invoice.discount_value}%)` : ''}</span>
+                <span>-{formatMoney(invoice.discount_amount)}</span>
+              </div>
+            )}
             {Number(invoice.tax_percent) > 0 && (
               <div className="totals-row"><span>Tax ({invoice.tax_percent}%)</span><span>{formatMoney(invoice.tax_amount)}</span></div>
             )}
@@ -136,6 +142,11 @@ export default function InvoiceDetail() {
                 </button>
               ))}
             </div>
+            {invoice.status !== 'void' && (
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8, marginBottom: 0 }}>
+                Marking this void returns its items to stock automatically.
+              </p>
+            )}
           </div>
         </div>
       </div>
