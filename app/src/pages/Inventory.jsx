@@ -3,6 +3,7 @@ import { api } from '../lib/api'
 import { formatMoney, formatUnitPrice } from '../lib/currency'
 
 const UNITS = ['pcs', 'kg', 'litre', 'packet']
+const PAGE_SIZE = 20
 
 function normalizeUnit(unit) {
   const u = (unit || '').trim().toLowerCase()
@@ -28,7 +29,10 @@ function emptyVariant() {
 }
 
 export default function Inventory() {
-  const [products, setProducts] = useState([])
+  const [products, setProducts] = useState([]) // current page, for the table
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [allProducts, setAllProducts] = useState([]) // full catalog — for the low-stock banner and search, which need to see everything, not just the current page
   const [status, setStatus] = useState('loading')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
@@ -41,22 +45,38 @@ export default function Inventory() {
   const [formError, setFormError] = useState('')
   const [search, setSearch] = useState('')
 
-  const load = () => {
+  const loadPage = (p) => {
     setStatus('loading')
     api
-      .listProducts()
-      .then((rows) => {
+      .listProducts({ page: p, pageSize: PAGE_SIZE })
+      .then(({ rows, total: t }) => {
         setProducts(rows)
+        setTotal(t)
+        setPage(p)
         setStatus('ready')
       })
       .catch(() => setStatus('error'))
   }
 
-  useEffect(load, [])
+  const loadAll = () => {
+    api
+      .listProducts({ all: true })
+      .then(({ rows }) => setAllProducts(rows))
+      .catch(() => {})
+  }
+
+  const reload = (p = page) => {
+    loadPage(p)
+    loadAll()
+  }
+
+  useEffect(() => reload(1), [])
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   const lowStockVariants = useMemo(() => {
     const rows = []
-    for (const p of products) {
+    for (const p of allProducts) {
       for (const v of p.product_variants || []) {
         if (Number(v.stock_qty) <= Number(v.low_stock_threshold)) {
           rows.push({ ...v, productName: p.name })
@@ -64,19 +84,21 @@ export default function Inventory() {
       }
     }
     return rows
-  }, [products])
+  }, [allProducts])
+
+  const searching = search.trim().length > 0
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return products
-    return products.filter((p) => {
+    return allProducts.filter((p) => {
       if (p.name.toLowerCase().includes(q)) return true
       if ((p.category || '').toLowerCase().includes(q)) return true
       return (p.product_variants || []).some(
         (v) => v.variant_label.toLowerCase().includes(q) || (v.sku || '').toLowerCase().includes(q),
       )
     })
-  }, [products, search])
+  }, [products, allProducts, search])
 
   const openCreateModal = () => {
     setEditingProduct(null)
@@ -160,7 +182,7 @@ export default function Inventory() {
         await api.createProduct({ ...body, variants })
       }
       setModalOpen(false)
-      load()
+      reload()
     } catch (err) {
       setFormError(err.message || 'Could not save product')
     } finally {
@@ -172,7 +194,7 @@ export default function Inventory() {
     if (!window.confirm(`Delete "${product.name}" and all its variants?`)) return
     try {
       await api.deleteProduct(product.id)
-      load()
+      reload()
     } catch {
       window.alert('Could not delete product')
     }
@@ -202,7 +224,7 @@ export default function Inventory() {
         </div>
       )}
 
-      {status === 'ready' && products.length > 0 && (
+      {status === 'ready' && (total > 0 || searching) && (
         <input
           type="text"
           value={search}
@@ -214,69 +236,79 @@ export default function Inventory() {
 
       {status === 'loading' && <p className="empty-state">loading…</p>}
       {status === 'error' && <p className="empty-state">couldn't load inventory — try refreshing</p>}
-      {status === 'ready' && products.length === 0 && (
+      {status === 'ready' && total === 0 && (
         <div className="card empty-state">No products yet — add your first one.</div>
       )}
-      {status === 'ready' && products.length > 0 && filteredProducts.length === 0 && (
+      {status === 'ready' && total > 0 && searching && filteredProducts.length === 0 && (
         <div className="card empty-state">No products match "{search}".</div>
       )}
 
       {status === 'ready' && filteredProducts.length > 0 && (
-        <div className="card" style={{ padding: 0 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Variant</th>
-                <th>SKU</th>
-                <th>Purchase price</th>
-                <th>Sell price</th>
-                <th>Stock</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProducts.map((product) => {
-                const variants = product.product_variants || []
-                if (variants.length === 0) {
-                  return (
-                    <tr key={product.id}>
-                      <td>{product.name}</td>
-                      <td colSpan={4} style={{ color: 'var(--muted)' }}>no variants</td>
-                      <td></td>
-                      <td>
-                        <button type="button" className="btn btn-sm" onClick={() => openEditModal(product)}>edit</button>{' '}
-                        <button type="button" className="btn btn-sm btn-danger" onClick={() => handleDeleteProduct(product)}>delete</button>
-                      </td>
-                    </tr>
-                  )
-                }
-                return variants.map((v, i) => {
-                  const low = v.stock_qty <= v.low_stock_threshold
-                  return (
-                    <tr key={v.id}>
-                      {i === 0 && <td rowSpan={variants.length}>{product.name}</td>}
-                      <td>{v.variant_label}</td>
-                      <td>{v.sku || '—'}</td>
-                      <td>{formatUnitPrice(v.purchase_price ?? 0, v.unit)}</td>
-                      <td>{formatUnitPrice(v.unit_price, v.unit)}</td>
-                      <td className={low ? 'stock-low' : ''}>
-                        {v.stock_qty} {v.unit}
-                        {low && <span className="tag tag-low" style={{ marginLeft: 6 }}>low</span>}
-                      </td>
-                      {i === 0 && (
-                        <td rowSpan={variants.length}>
+        <>
+          <div className="card" style={{ padding: 0 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Variant</th>
+                  <th>Purchase price</th>
+                  <th>Sell price</th>
+                  <th>Stock</th>
+                  <th>SKU</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map((product) => {
+                  const variants = product.product_variants || []
+                  if (variants.length === 0) {
+                    return (
+                      <tr key={product.id}>
+                        <td>{product.name}</td>
+                        <td colSpan={4} style={{ color: 'var(--muted)' }}>no variants</td>
+                        <td></td>
+                        <td>
                           <button type="button" className="btn btn-sm" onClick={() => openEditModal(product)}>edit</button>{' '}
                           <button type="button" className="btn btn-sm btn-danger" onClick={() => handleDeleteProduct(product)}>delete</button>
                         </td>
-                      )}
-                    </tr>
-                  )
-                })
-              })}
-            </tbody>
-          </table>
-        </div>
+                      </tr>
+                    )
+                  }
+                  return variants.map((v, i) => {
+                    const low = v.stock_qty <= v.low_stock_threshold
+                    return (
+                      <tr key={v.id}>
+                        {i === 0 && <td rowSpan={variants.length}>{product.name}</td>}
+                        <td>{v.variant_label}</td>
+                        <td>{formatUnitPrice(v.purchase_price ?? 0, v.unit)}</td>
+                        <td>{formatUnitPrice(v.unit_price, v.unit)}</td>
+                        <td className={low ? 'stock-low' : ''}>
+                          {v.stock_qty} {v.unit}
+                          {low && <span className="tag tag-low" style={{ marginLeft: 6 }}>low</span>}
+                        </td>
+                        <td>{v.sku || '—'}</td>
+                        {i === 0 && (
+                          <td rowSpan={variants.length}>
+                            <button type="button" className="btn btn-sm" onClick={() => openEditModal(product)}>edit</button>{' '}
+                            <button type="button" className="btn btn-sm btn-danger" onClick={() => handleDeleteProduct(product)}>delete</button>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {!searching && totalPages > 1 && (
+            <div className="pagination">
+              <button type="button" className="btn btn-sm" disabled={page <= 1} onClick={() => loadPage(page - 1)}>‹ prev</button>
+              <span>page {page} of {totalPages}</span>
+              <button type="button" className="btn btn-sm" disabled={page >= totalPages} onClick={() => loadPage(page + 1)}>next ›</button>
+            </div>
+          )}
+        </>
       )}
 
       {modalOpen && (

@@ -30,22 +30,36 @@ async function request(path, options = {}) {
   return res.json()
 }
 
+// { page, pageSize } for a browsing table, or { all: true } to fetch
+// everything in one go (search-across-everything, full-dataset stats).
+function pagingQuery(params = {}) {
+  const q = new URLSearchParams()
+  if (params.all) q.set('all', 'true')
+  else {
+    if (params.page) q.set('page', params.page)
+    if (params.pageSize) q.set('pageSize', params.pageSize)
+  }
+  const s = q.toString()
+  return s ? `?${s}` : ''
+}
+
 export { UnauthorizedError }
 
 export const api = {
-  listProducts: () => request('/products'),
+  // Each resolves to { rows, total, page, pageSize }.
+  listProducts: (params) => request(`/products${pagingQuery(params)}`),
   createProduct: (body) => request('/products', { method: 'POST', body: JSON.stringify(body) }),
   updateProduct: (id, body) => request(`/products/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteProduct: (id) => request(`/products/${id}`, { method: 'DELETE' }),
   deleteVariant: (id) => request(`/variants/${id}`, { method: 'DELETE' }),
 
-  listInvoices: () => request('/invoices'),
+  listInvoices: (params) => request(`/invoices${pagingQuery(params)}`),
   listInvoiceItems: () => request('/invoice-items'),
   getInvoice: (id) => request(`/invoices/${id}`),
   createInvoice: (body) => request('/invoices', { method: 'POST', body: JSON.stringify(body) }),
   setInvoiceStatus: (id, status) => request(`/invoices/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   deleteInvoice: (id, restock) => request(`/invoices/${id}?restock=${restock ? 'true' : 'false'}`, { method: 'DELETE' }),
 
-  listPurchases: () => request('/purchases'),
+  listPurchases: (params) => request(`/purchases${pagingQuery(params)}`),
   createPurchase: (body) => request('/purchases', { method: 'POST', body: JSON.stringify(body) }),
 }

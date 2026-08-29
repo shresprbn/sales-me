@@ -231,6 +231,7 @@ tr:last-child td { border-bottom: none; }
   font-size: 13px;
   line-height: 1.6;
 }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; font-size: 13px; color: var(--muted); }
 
 /* ── Stats ───────────────────────────────────────────────── */
 .section-title { font-size: 14px; font-weight: 700; margin: 0 0 12px; }
@@ -264,6 +265,10 @@ tr:last-child td { border-bottom: none; }
 .picker-group { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
 .picker-group:last-child { margin-bottom: 0; }
 .picker-group-title {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
   background: var(--bg);
   padding: 7px 12px;
   font-size: 11px;
@@ -271,8 +276,12 @@ tr:last-child td { border-bottom: none; }
   text-transform: uppercase;
   letter-spacing: .03em;
   color: var(--muted);
-  border-bottom: 1px solid var(--border);
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
 }
+.picker-group-title.expanded { border-bottom: 1px solid var(--border); }
+.accordion-caret { font-size: 12px; }
 .picker-item {
   display: flex;
   justify-content: space-between;
