@@ -487,33 +487,38 @@ async function handleUpdateInvoiceStatus(request, env, headers, id) {
     return json({ error: `status must be one of ${INVOICE_STATUSES.join(', ')}` }, 400, headers)
   }
 
-  // Voiding an invoice returns its items to stock — but only on the
-  // transition INTO void, so flipping it back and forth can't double-credit
-  // inventory.
+  const currentRes = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${id}&select=status`, {
+    headers: supabaseHeaders(env),
+  })
+  const [current] = currentRes.ok ? await currentRes.json() : []
+  if (!current) return json({ error: 'Invoice not found' }, 404, headers)
+
+  // Void is a one-way door — once set, nothing (including another void
+  // request) may change the status further, so stock that was already
+  // returned can't be double-credited or the record un-voided by mistake.
+  if (current.status === 'void') {
+    return json({ error: 'This invoice is void; its status is locked' }, 409, headers)
+  }
+
+  // Voiding an invoice returns its items to stock.
   if (status === 'void') {
-    const currentRes = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${id}&select=status`, {
-      headers: supabaseHeaders(env),
-    })
-    const [current] = currentRes.ok ? await currentRes.json() : []
-    if (current && current.status !== 'void') {
-      const itemsRes = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/invoice_items?invoice_id=eq.${id}&select=variant_id,qty`,
-        { headers: supabaseHeaders(env) },
+    const itemsRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/invoice_items?invoice_id=eq.${id}&select=variant_id,qty`,
+      { headers: supabaseHeaders(env) },
+    )
+    if (itemsRes.ok) {
+      const items = await itemsRes.json()
+      await Promise.all(
+        items
+          .filter((it) => it.variant_id)
+          .map((it) =>
+            fetch(`${env.SUPABASE_URL}/rest/v1/rpc/increment_stock`, {
+              method: 'POST',
+              headers: supabaseHeaders(env, { 'Content-Type': 'application/json' }),
+              body: JSON.stringify({ p_variant_id: it.variant_id, p_qty: it.qty }),
+            }).catch(() => {}),
+          ),
       )
-      if (itemsRes.ok) {
-        const items = await itemsRes.json()
-        await Promise.all(
-          items
-            .filter((it) => it.variant_id)
-            .map((it) =>
-              fetch(`${env.SUPABASE_URL}/rest/v1/rpc/increment_stock`, {
-                method: 'POST',
-                headers: supabaseHeaders(env, { 'Content-Type': 'application/json' }),
-                body: JSON.stringify({ p_variant_id: it.variant_id, p_qty: it.qty }),
-              }).catch(() => {}),
-            ),
-        )
-      }
     }
   }
 

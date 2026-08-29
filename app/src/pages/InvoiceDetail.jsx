@@ -33,12 +33,15 @@ export default function InvoiceDetail() {
   useEffect(load, [id])
 
   const changeStatus = async (newStatus) => {
+    if (newStatus === 'void' && !window.confirm('Void this invoice? Its items will be returned to stock, and the status will be locked.')) {
+      return
+    }
     setUpdating(true)
     try {
       const updated = await api.setInvoiceStatus(id, newStatus)
       setInvoice((prev) => ({ ...prev, status: updated.status }))
-    } catch {
-      window.alert('Could not update status')
+    } catch (err) {
+      window.alert(err.message || 'Could not update status')
     } finally {
       setUpdating(false)
     }
@@ -135,16 +138,20 @@ export default function InvoiceDetail() {
                   key={s}
                   type="button"
                   className={`btn btn-sm${invoice.status === s ? ' btn-primary' : ''}`}
-                  disabled={updating || invoice.status === s}
+                  disabled={updating || invoice.status === s || invoice.status === 'void'}
                   onClick={() => changeStatus(s)}
                 >
                   {s}
                 </button>
               ))}
             </div>
-            {invoice.status !== 'void' && (
+            {invoice.status === 'void' ? (
               <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8, marginBottom: 0 }}>
-                Marking this void returns its items to stock automatically.
+                This invoice is void — its status is locked and items were returned to stock.
+              </p>
+            ) : (
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8, marginBottom: 0 }}>
+                Marking this void returns its items to stock automatically and locks the status.
               </p>
             )}
           </div>
