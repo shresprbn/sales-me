@@ -40,6 +40,50 @@ function supabaseHeaders(env, extra = {}) {
   }
 }
 
+// page is 1-indexed. pageSize is capped so a bad/huge value from the
+// client can't force one request to pull the whole table.
+function parsePaging(url, defaultSize) {
+  const page = Math.max(1, parseInt(url.searchParams.get('page'), 10) || 1)
+  const pageSize = Math.min(500, Math.max(1, parseInt(url.searchParams.get('pageSize'), 10) || defaultSize))
+  const offset = (page - 1) * pageSize
+  return { page, pageSize, offset }
+}
+
+// Fetches one page via PostgREST's Range header and reads the total row
+// count back out of Content-Range (via Prefer: count=exact), so the
+// frontend can page through a table without ever pulling it all at once.
+async function fetchPage(env, path, offset, pageSize) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+    headers: supabaseHeaders(env, { Prefer: 'count=exact', Range: `${offset}-${offset + pageSize - 1}` }),
+  })
+  if (!res.ok) return { ok: false }
+  const range = res.headers.get('content-range') || '0-0/0'
+  const total = Number(range.split('/')[1]) || 0
+  return { ok: true, rows: await res.json(), total }
+}
+
+// A few callers (Stats' totals, the item pickers on New Invoice/Purchases
+// that need to search the whole catalog) legitimately need everything, not
+// one page of it — ?all=true opts out of pagination for those.
+async function fetchAll(env, path) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, { headers: supabaseHeaders(env) })
+  if (!res.ok) return { ok: false }
+  const rows = await res.json()
+  return { ok: true, rows }
+}
+
+async function handleListPaged(env, headers, url, path, defaultSize) {
+  if (url.searchParams.get('all') === 'true') {
+    const { ok, rows } = await fetchAll(env, path)
+    if (!ok) return null
+    return { rows, total: rows.length, page: 1, pageSize: rows.length }
+  }
+  const { page, pageSize, offset } = parsePaging(url, defaultSize)
+  const { ok, rows, total } = await fetchPage(env, path, offset, pageSize)
+  if (!ok) return null
+  return { rows, total, page, pageSize }
+}
+
 // ── Auth — one admin password, a signed opaque token, no user table ─────
 // token shape: "<expiresAtMs>.<hex hmac of expiresAtMs>". Verifying just
 // means recomputing the HMAC and checking it matches plus hasn't expired —
@@ -100,13 +144,10 @@ async function handleLogin(request, env, headers) {
 }
 
 // ── Products + variants ──────────────────────────────────────────────
-async function handleListProducts(env, headers) {
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/products?select=*,product_variants(*)&order=name.asc`,
-    { headers: supabaseHeaders(env) },
-  )
-  if (!res.ok) return json({ error: 'Could not load products' }, 502, headers)
-  return json(await res.json(), 200, headers)
+async function handleListProducts(env, headers, url) {
+  const result = await handleListPaged(env, headers, url, 'products?select=*,product_variants(*)&order=name.asc', 25)
+  if (!result) return json({ error: 'Could not load products' }, 502, headers)
+  return json(result, 200, headers)
 }
 
 async function handleCreateProduct(request, env, headers) {
@@ -252,13 +293,10 @@ async function handleDeleteVariant(env, headers, id) {
 }
 
 // ── Invoices ──────────────────────────────────────────────────────────
-async function handleListInvoices(env, headers) {
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/invoices?select=*&order=created_at.desc`,
-    { headers: supabaseHeaders(env) },
-  )
-  if (!res.ok) return json({ error: 'Could not load invoices' }, 502, headers)
-  return json(await res.json(), 200, headers)
+async function handleListInvoices(env, headers, url) {
+  const result = await handleListPaged(env, headers, url, 'invoices?select=*&order=created_at.desc', 25)
+  if (!result) return json({ error: 'Could not load invoices' }, 502, headers)
+  return json(result, 200, headers)
 }
 
 // Flat feed of every line item ever billed, with the parent invoice's
@@ -491,13 +529,10 @@ async function handleUpdateInvoiceStatus(request, env, headers, id) {
 }
 
 // ── Purchases ─────────────────────────────────────────────────────────
-async function handleListPurchases(env, headers) {
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/purchases?select=*&order=created_at.desc`,
-    { headers: supabaseHeaders(env) },
-  )
-  if (!res.ok) return json({ error: 'Could not load purchases' }, 502, headers)
-  return json(await res.json(), 200, headers)
+async function handleListPurchases(env, headers, url) {
+  const result = await handleListPaged(env, headers, url, 'purchases?select=*&order=created_at.desc', 25)
+  if (!result) return json({ error: 'Could not load purchases' }, 502, headers)
+  return json(result, 200, headers)
 }
 
 async function handleCreatePurchase(request, env, headers) {
@@ -581,7 +616,7 @@ export default {
     }
 
     if (url.pathname === '/products' && request.method === 'GET') {
-      return handleListProducts(env, headers)
+      return handleListProducts(env, headers, url)
     }
     if (url.pathname === '/products' && request.method === 'POST') {
       return handleCreateProduct(request, env, headers)
@@ -599,7 +634,7 @@ export default {
     }
 
     if (url.pathname === '/invoices' && request.method === 'GET') {
-      return handleListInvoices(env, headers)
+      return handleListInvoices(env, headers, url)
     }
     if (url.pathname === '/invoice-items' && request.method === 'GET') {
       return handleListInvoiceItems(env, headers)
@@ -620,7 +655,7 @@ export default {
     }
 
     if (url.pathname === '/purchases' && request.method === 'GET') {
-      return handleListPurchases(env, headers)
+      return handleListPurchases(env, headers, url)
     }
     if (url.pathname === '/purchases' && request.method === 'POST') {
       return handleCreatePurchase(request, env, headers)
