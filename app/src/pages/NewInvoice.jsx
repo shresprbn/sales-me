@@ -23,6 +23,7 @@ export default function NewInvoice() {
   const [loadStatus, setLoadStatus] = useState('loading')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [expandedGroups, setExpandedGroups] = useState(() => new Set())
   const [pendingVariant, setPendingVariant] = useState(null)
   const [pendingQty, setPendingQty] = useState('')
   const [lineItems, setLineItems] = useState([]) // { key, variantId, productName, variantLabel, unitPrice, qty, stockQty }
@@ -39,8 +40,8 @@ export default function NewInvoice() {
 
   useEffect(() => {
     api
-      .listProducts()
-      .then((rows) => {
+      .listProducts({ all: true })
+      .then(({ rows }) => {
         setProducts(rows)
         setLoadStatus('ready')
       })
@@ -89,9 +90,19 @@ export default function NewInvoice() {
     return groups
   }, [filteredVariants])
 
+  const toggleGroup = (productName) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(productName)) next.delete(productName)
+      else next.add(productName)
+      return next
+    })
+  }
+
   const openQtyStep = (variant) => {
     setPickerOpen(false)
     setSearch('')
+    setExpandedGroups(new Set())
     setPendingVariant(variant)
     setPendingQty('')
   }
@@ -357,19 +368,31 @@ export default function NewInvoice() {
             {loadStatus === 'ready' && filteredVariants.length === 0 && <p className="empty-state">no matching items</p>}
             {loadStatus === 'ready' && filteredVariants.length > 0 && (
               <div className="picker-groups">
-                {groupedVariants.map((group) => (
-                  <div className="picker-group" key={group.productName}>
-                    <div className="picker-group-title">{group.productName}</div>
-                    <div className="picker-list">
-                      {group.variants.map((v) => (
-                        <div className="picker-item" key={v.variantId} onClick={() => openQtyStep(v)}>
-                          <span>{v.variantLabel}</span>
-                          <span className="picker-item-meta">{formatUnitPrice(v.unitPrice, v.unit)} · {v.stockQty} {v.unit} in stock</span>
+                {groupedVariants.map((group) => {
+                  const expanded = expandedGroups.has(group.productName)
+                  return (
+                    <div className="picker-group" key={group.productName}>
+                      <button
+                        type="button"
+                        className={`picker-group-title accordion-toggle${expanded ? ' expanded' : ''}`}
+                        onClick={() => toggleGroup(group.productName)}
+                      >
+                        <span>{group.productName}</span>
+                        <span className="accordion-caret">{expanded ? '▾' : '▸'}</span>
+                      </button>
+                      {expanded && (
+                        <div className="picker-list">
+                          {group.variants.map((v) => (
+                            <div className="picker-item" key={v.variantId} onClick={() => openQtyStep(v)}>
+                              <span>{v.variantLabel}</span>
+                              <span className="picker-item-meta">{formatUnitPrice(v.unitPrice, v.unit)} · {v.stockQty} {v.unit} in stock</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
             <div className="modal-actions">

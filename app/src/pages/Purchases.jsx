@@ -2,17 +2,22 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
 import { formatMoney } from '../lib/currency'
 
+const PAGE_SIZE = 20
+
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 export default function Purchases() {
   const [purchases, setPurchases] = useState([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [products, setProducts] = useState([])
   const [status, setStatus] = useState('loading')
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [expandedGroups, setExpandedGroups] = useState(() => new Set())
   const [pendingVariant, setPendingVariant] = useState(null)
   const [supplier, setSupplier] = useState('')
   const [qty, setQty] = useState('')
@@ -21,18 +26,31 @@ export default function Purchases() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
 
-  const load = () => {
+  const loadPage = (p) => {
     setStatus('loading')
-    Promise.all([api.listPurchases(), api.listProducts()])
-      .then(([purchaseRows, productRows]) => {
-        setPurchases(purchaseRows)
-        setProducts(productRows)
+    api
+      .listPurchases({ page: p, pageSize: PAGE_SIZE })
+      .then(({ rows, total: t }) => {
+        setPurchases(rows)
+        setTotal(t)
+        setPage(p)
         setStatus('ready')
       })
       .catch(() => setStatus('error'))
   }
 
-  useEffect(load, [])
+  const loadProducts = () => {
+    api.listProducts({ all: true }).then(({ rows }) => setProducts(rows)).catch(() => {})
+  }
+
+  const reload = (p = page) => {
+    loadPage(p)
+    loadProducts()
+  }
+
+  useEffect(() => reload(1), [])
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   const allVariants = useMemo(() => {
     const rows = []
@@ -73,9 +91,19 @@ export default function Purchases() {
     return groups
   }, [filteredVariants])
 
+  const toggleGroup = (productName) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(productName)) next.delete(productName)
+      else next.add(productName)
+      return next
+    })
+  }
+
   const openDetail = (variant) => {
     setPickerOpen(false)
     setSearch('')
+    setExpandedGroups(new Set())
     setPendingVariant(variant)
     setSupplier('')
     setQty('')
@@ -109,7 +137,7 @@ export default function Purchases() {
         notes: notes.trim(),
       })
       setPendingVariant(null)
-      load()
+      reload()
     } catch (err) {
       setFormError(err.message || 'Could not record purchase')
     } finally {
@@ -131,39 +159,49 @@ export default function Purchases() {
 
       {status === 'loading' && <p className="empty-state">loading…</p>}
       {status === 'error' && <p className="empty-state">couldn't load purchases — try refreshing</p>}
-      {status === 'ready' && purchases.length === 0 && (
+      {status === 'ready' && total === 0 && (
         <div className="card empty-state">No purchases logged yet.</div>
       )}
 
       {status === 'ready' && purchases.length > 0 && (
-        <div className="card" style={{ padding: 0 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Product</th>
-                <th>Variant</th>
-                <th>Supplier</th>
-                <th>Qty</th>
-                <th>Cost/unit</th>
-                <th>Total cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {purchases.map((p) => (
-                <tr key={p.id}>
-                  <td>{formatDate(p.created_at)}</td>
-                  <td>{p.product_name}</td>
-                  <td>{p.variant_label}</td>
-                  <td>{p.supplier || '—'}</td>
-                  <td>{p.qty}</td>
-                  <td>{formatMoney(p.cost_price)}</td>
-                  <td>{formatMoney(p.total_cost)}</td>
+        <>
+          <div className="card" style={{ padding: 0 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Product</th>
+                  <th>Variant</th>
+                  <th>Supplier</th>
+                  <th>Qty</th>
+                  <th>Cost/unit</th>
+                  <th>Total cost</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {purchases.map((p) => (
+                  <tr key={p.id}>
+                    <td>{formatDate(p.created_at)}</td>
+                    <td>{p.product_name}</td>
+                    <td>{p.variant_label}</td>
+                    <td>{p.supplier || '—'}</td>
+                    <td>{p.qty}</td>
+                    <td>{formatMoney(p.cost_price)}</td>
+                    <td>{formatMoney(p.total_cost)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="pagination">
+              <button type="button" className="btn btn-sm" disabled={page <= 1} onClick={() => loadPage(page - 1)}>‹ prev</button>
+              <span>page {page} of {totalPages}</span>
+              <button type="button" className="btn btn-sm" disabled={page >= totalPages} onClick={() => loadPage(page + 1)}>next ›</button>
+            </div>
+          )}
+        </>
       )}
 
       {pickerOpen && (
@@ -181,19 +219,31 @@ export default function Purchases() {
             {groupedVariants.length === 0 && <p className="empty-state">no matching items</p>}
             {groupedVariants.length > 0 && (
               <div className="picker-groups">
-                {groupedVariants.map((group) => (
-                  <div className="picker-group" key={group.productName}>
-                    <div className="picker-group-title">{group.productName}</div>
-                    <div className="picker-list">
-                      {group.variants.map((v) => (
-                        <div className="picker-item" key={v.variantId} onClick={() => openDetail(v)}>
-                          <span>{v.variantLabel}</span>
-                          <span className="picker-item-meta">last cost {formatMoney(v.purchasePrice)}/{v.unit}</span>
+                {groupedVariants.map((group) => {
+                  const expanded = expandedGroups.has(group.productName)
+                  return (
+                    <div className="picker-group" key={group.productName}>
+                      <button
+                        type="button"
+                        className={`picker-group-title accordion-toggle${expanded ? ' expanded' : ''}`}
+                        onClick={() => toggleGroup(group.productName)}
+                      >
+                        <span>{group.productName}</span>
+                        <span className="accordion-caret">{expanded ? '▾' : '▸'}</span>
+                      </button>
+                      {expanded && (
+                        <div className="picker-list">
+                          {group.variants.map((v) => (
+                            <div className="picker-item" key={v.variantId} onClick={() => openDetail(v)}>
+                              <span>{v.variantLabel}</span>
+                              <span className="picker-item-meta">last cost {formatMoney(v.purchasePrice)}/{v.unit}</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
             <div className="modal-actions">
