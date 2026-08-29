@@ -18,6 +18,7 @@ export default function InvoiceDetail() {
   const [updating, setUpdating] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [voidModalOpen, setVoidModalOpen] = useState(false)
 
   const load = () => {
     setStatus('loading')
@@ -33,13 +34,27 @@ export default function InvoiceDetail() {
   useEffect(load, [id])
 
   const changeStatus = async (newStatus) => {
-    if (newStatus === 'void' && !window.confirm('Void this invoice? Its items will be returned to stock, and the status will be locked.')) {
+    if (newStatus === 'void') {
+      setVoidModalOpen(true)
       return
     }
     setUpdating(true)
     try {
       const updated = await api.setInvoiceStatus(id, newStatus)
       setInvoice((prev) => ({ ...prev, status: updated.status }))
+    } catch (err) {
+      window.alert(err.message || 'Could not update status')
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  const confirmVoid = async () => {
+    setUpdating(true)
+    try {
+      const updated = await api.setInvoiceStatus(id, 'void')
+      setInvoice((prev) => ({ ...prev, status: updated.status }))
+      setVoidModalOpen(false)
     } catch (err) {
       window.alert(err.message || 'Could not update status')
     } finally {
@@ -174,6 +189,25 @@ export default function InvoiceDetail() {
               </button>
               <button type="button" className="btn btn-danger" onClick={() => handleDelete(true)} disabled={deleting}>
                 {deleting ? 'deleting…' : 'delete & return items to stock'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {voidModalOpen && (
+        <div className="modal-overlay" onClick={() => !updating && setVoidModalOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2 className="modal-title">Void {invoice.invoice_number}?</h2>
+            <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: -8 }}>
+              Its items will be returned to stock, and the status will be locked — this can't be undone.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="btn" onClick={() => setVoidModalOpen(false)} disabled={updating}>
+                cancel
+              </button>
+              <button type="button" className="btn btn-danger" onClick={confirmVoid} disabled={updating}>
+                {updating ? 'voiding…' : 'void invoice'}
               </button>
             </div>
           </div>
