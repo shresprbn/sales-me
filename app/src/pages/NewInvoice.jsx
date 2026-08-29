@@ -22,7 +22,7 @@ export default function NewInvoice() {
   const [discountValue, setDiscountValue] = useState('0')
   const [taxPercent, setTaxPercent] = useState('0')
   const [notes, setNotes] = useState('')
-  const [autoDownload, setAutoDownload] = useState(true)
+  const [autoDownload, setAutoDownload] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
