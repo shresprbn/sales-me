@@ -120,12 +120,13 @@ async function handleCreateProduct(request, env, headers) {
   const name = cleanText(payload.name, 200)
   if (!name) return json({ error: 'Product name is required' }, 400, headers)
   const category = cleanText(payload.category, 100)
+  const description = cleanText(payload.description, 1000)
   const variants = Array.isArray(payload.variants) ? payload.variants : []
 
   const productRes = await fetch(`${env.SUPABASE_URL}/rest/v1/products`, {
     method: 'POST',
     headers: supabaseHeaders(env, { 'Content-Type': 'application/json', Prefer: 'return=representation' }),
-    body: JSON.stringify({ name, category: category || null }),
+    body: JSON.stringify({ name, category: category || null, description: description || null }),
   })
   if (!productRes.ok) {
     const detail = await productRes.text()
@@ -139,6 +140,7 @@ async function handleCreateProduct(request, env, headers) {
       variant_label: cleanText(v.variantLabel, 60),
       sku: cleanText(v.sku, 60) || null,
       unit: cleanText(v.unit, 20) || 'pcs',
+      purchase_price: Number(v.purchasePrice) || 0,
       unit_price: Number(v.unitPrice),
       stock_qty: Number(v.stockQty) || 0,
       low_stock_threshold: Number(v.lowStockThreshold) || 0,
@@ -170,6 +172,7 @@ async function handleUpdateProduct(request, env, headers, id) {
   const fields = {}
   if (payload.name != null) fields.name = cleanText(payload.name, 200)
   if (payload.category != null) fields.category = cleanText(payload.category, 100) || null
+  if (payload.description != null) fields.description = cleanText(payload.description, 1000) || null
   fields.updated_at = new Date().toISOString()
 
   const productRes = await fetch(`${env.SUPABASE_URL}/rest/v1/products?id=eq.${id}`, {
@@ -189,6 +192,7 @@ async function handleUpdateProduct(request, env, headers, id) {
       variant_label: cleanText(v.variantLabel, 60),
       sku: cleanText(v.sku, 60) || null,
       unit: cleanText(v.unit, 20) || 'pcs',
+      purchase_price: Number(v.purchasePrice) || 0,
       unit_price: Number(v.unitPrice),
       stock_qty: Number(v.stockQty) || 0,
       low_stock_threshold: Number(v.lowStockThreshold) || 0,
@@ -356,9 +360,19 @@ async function handleCreateInvoice(request, env, headers) {
   }
 
   const subtotal = Math.round(cleanItems.reduce((sum, it) => sum + it.line_total, 0) * 100) / 100
+
+  const discountType = payload.discountType === 'flat' ? 'flat' : 'percent'
+  const discountValueRaw = Math.max(0, Number(payload.discountValue) || 0)
+  const discountAmount =
+    discountType === 'percent'
+      ? Math.round(subtotal * (Math.min(100, discountValueRaw) / 100) * 100) / 100
+      : Math.round(Math.min(discountValueRaw, subtotal) * 100) / 100
+  const discountValue = discountType === 'percent' ? Math.min(100, discountValueRaw) : discountValueRaw
+  const discounted = Math.round((subtotal - discountAmount) * 100) / 100
+
   const taxPercent = Math.max(0, Math.min(100, Number(payload.taxPercent) || 0))
-  const taxAmount = Math.round(subtotal * (taxPercent / 100) * 100) / 100
-  const total = Math.round((subtotal + taxAmount) * 100) / 100
+  const taxAmount = Math.round(discounted * (taxPercent / 100) * 100) / 100
+  const total = Math.round((discounted + taxAmount) * 100) / 100
 
   const invoiceRow = {
     invoice_number: await nextInvoiceNumber(env),
@@ -366,6 +380,9 @@ async function handleCreateInvoice(request, env, headers) {
     customer_phone: cleanText(payload.customerPhone, 40) || null,
     customer_address: cleanText(payload.customerAddress, 400) || null,
     subtotal,
+    discount_type: discountType,
+    discount_value: discountValue,
+    discount_amount: discountAmount,
     tax_percent: taxPercent,
     tax_amount: taxAmount,
     total,
@@ -431,6 +448,37 @@ async function handleUpdateInvoiceStatus(request, env, headers, id) {
   if (!INVOICE_STATUSES.includes(status)) {
     return json({ error: `status must be one of ${INVOICE_STATUSES.join(', ')}` }, 400, headers)
   }
+
+  // Voiding an invoice returns its items to stock — but only on the
+  // transition INTO void, so flipping it back and forth can't double-credit
+  // inventory.
+  if (status === 'void') {
+    const currentRes = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${id}&select=status`, {
+      headers: supabaseHeaders(env),
+    })
+    const [current] = currentRes.ok ? await currentRes.json() : []
+    if (current && current.status !== 'void') {
+      const itemsRes = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/invoice_items?invoice_id=eq.${id}&select=variant_id,qty`,
+        { headers: supabaseHeaders(env) },
+      )
+      if (itemsRes.ok) {
+        const items = await itemsRes.json()
+        await Promise.all(
+          items
+            .filter((it) => it.variant_id)
+            .map((it) =>
+              fetch(`${env.SUPABASE_URL}/rest/v1/rpc/increment_stock`, {
+                method: 'POST',
+                headers: supabaseHeaders(env, { 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ p_variant_id: it.variant_id, p_qty: it.qty }),
+              }).catch(() => {}),
+            ),
+        )
+      }
+    }
+  }
+
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${id}`, {
     method: 'PATCH',
     headers: supabaseHeaders(env, { 'Content-Type': 'application/json', Prefer: 'return=representation' }),
@@ -440,6 +488,75 @@ async function handleUpdateInvoiceStatus(request, env, headers, id) {
   const [invoice] = await res.json()
   if (!invoice) return json({ error: 'Invoice not found' }, 404, headers)
   return json(invoice, 200, headers)
+}
+
+// ── Purchases ─────────────────────────────────────────────────────────
+async function handleListPurchases(env, headers) {
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/purchases?select=*&order=created_at.desc`,
+    { headers: supabaseHeaders(env) },
+  )
+  if (!res.ok) return json({ error: 'Could not load purchases' }, 502, headers)
+  return json(await res.json(), 200, headers)
+}
+
+async function handleCreatePurchase(request, env, headers) {
+  let payload
+  try {
+    payload = await request.json()
+  } catch {
+    return json({ error: 'Invalid JSON body' }, 400, headers)
+  }
+
+  const productName = cleanText(payload.productName, 200)
+  const variantLabel = cleanText(payload.variantLabel, 60)
+  const qty = Number(payload.qty)
+  const costPrice = Number(payload.costPrice)
+  if (!productName || !variantLabel || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(costPrice) || costPrice < 0) {
+    return json({ error: 'A purchase needs a valid product, variant, quantity, and cost price' }, 400, headers)
+  }
+  const variantId = payload.variantId && UUID_RE.test(payload.variantId) ? payload.variantId : null
+
+  const row = {
+    variant_id: variantId,
+    product_name: productName,
+    variant_label: variantLabel,
+    supplier: cleanText(payload.supplier, 200) || null,
+    qty,
+    cost_price: costPrice,
+    total_cost: Math.round(qty * costPrice * 100) / 100,
+    notes: cleanText(payload.notes, 500) || null,
+  }
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/purchases`, {
+    method: 'POST',
+    headers: supabaseHeaders(env, { 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+    body: JSON.stringify(row),
+  })
+  if (!res.ok) {
+    const detail = await res.text()
+    return json({ error: 'Could not record purchase', detail }, 502, headers)
+  }
+  const [purchase] = await res.json()
+
+  // Best-effort, same trade-off as invoice stock decrement — the purchase
+  // record already exists even if one of these hiccups.
+  if (variantId) {
+    await Promise.all([
+      fetch(`${env.SUPABASE_URL}/rest/v1/rpc/increment_stock`, {
+        method: 'POST',
+        headers: supabaseHeaders(env, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ p_variant_id: variantId, p_qty: qty }),
+      }).catch(() => {}),
+      fetch(`${env.SUPABASE_URL}/rest/v1/product_variants?id=eq.${variantId}`, {
+        method: 'PATCH',
+        headers: supabaseHeaders(env, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ purchase_price: costPrice, updated_at: new Date().toISOString() }),
+      }).catch(() => {}),
+    ])
+  }
+
+  return json(purchase, 201, headers)
 }
 
 export default {
@@ -500,6 +617,13 @@ export default {
     const invoiceStatusMatch = url.pathname.match(/^\/invoices\/([^/]+)\/status$/)
     if (invoiceStatusMatch && request.method === 'PATCH') {
       return handleUpdateInvoiceStatus(request, env, headers, invoiceStatusMatch[1])
+    }
+
+    if (url.pathname === '/purchases' && request.method === 'GET') {
+      return handleListPurchases(env, headers)
+    }
+    if (url.pathname === '/purchases' && request.method === 'POST') {
+      return handleCreatePurchase(request, env, headers)
     }
 
     return json({ error: 'Not found' }, 404, headers)
