@@ -19,10 +19,10 @@ export default function Stats() {
   const [status, setStatus] = useState('loading')
 
   useEffect(() => {
-    Promise.all([api.listProducts(), api.listInvoices(), api.listInvoiceItems()])
-      .then(([productRows, invoiceRows, itemRows]) => {
-        setProducts(productRows)
-        setInvoices(invoiceRows)
+    Promise.all([api.listProducts({ all: true }), api.listInvoices({ all: true }), api.listInvoiceItems()])
+      .then(([products, invoices, itemRows]) => {
+        setProducts(products.rows)
+        setInvoices(invoices.rows)
         setInvoiceItems(itemRows)
         setStatus('ready')
       })
