@@ -40,6 +40,7 @@ export default function Inventory() {
   const [formCategory, setFormCategory] = useState('')
   const [formDescription, setFormDescription] = useState('')
   const [formVariants, setFormVariants] = useState([emptyVariant()])
+  const [expandedVariants, setExpandedVariants] = useState(() => new Set())
   const [removedVariantIds, setRemovedVariantIds] = useState([])
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
@@ -101,11 +102,13 @@ export default function Inventory() {
   }, [products, allProducts, search])
 
   const openCreateModal = () => {
+    const first = emptyVariant()
     setEditingProduct(null)
     setFormName('')
     setFormCategory('')
     setFormDescription('')
-    setFormVariants([emptyVariant()])
+    setFormVariants([first])
+    setExpandedVariants(new Set([first._key])) // empty and needs filling in, so start open
     setRemovedVariantIds([])
     setFormError('')
     setModalOpen(true)
@@ -129,6 +132,7 @@ export default function Inventory() {
         lowStockThreshold: String(v.low_stock_threshold),
       })),
     )
+    setExpandedVariants(new Set()) // existing variants collapsed by default, so they stay separated and scannable
     setRemovedVariantIds([])
     setFormError('')
     setModalOpen(true)
@@ -144,13 +148,29 @@ export default function Inventory() {
   }
 
   const addVariantRow = () => {
-    setFormVariants((prev) => [...prev, emptyVariant()])
+    const next = emptyVariant()
+    setFormVariants((prev) => [...prev, next])
+    setExpandedVariants((prev) => new Set(prev).add(next._key)) // new row is empty, open it right away
   }
 
   const removeVariantRow = (key) => {
     const variant = formVariants.find((v) => v._key === key)
     if (variant?.id) setRemovedVariantIds((prev) => [...prev, variant.id])
     setFormVariants((prev) => prev.filter((v) => v._key !== key))
+    setExpandedVariants((prev) => {
+      const next = new Set(prev)
+      next.delete(key)
+      return next
+    })
+  }
+
+  const toggleVariantExpanded = (key) => {
+    setExpandedVariants((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
   const handleSubmit = async (e) => {
@@ -337,88 +357,110 @@ export default function Inventory() {
               </div>
 
               <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Variants</label>
-              {formVariants.map((v) => (
-                <div className="variant-row" key={v._key}>
-                  <div className="field">
-                    <label>Variant</label>
-                    <input
-                      type="text"
-                      value={v.variantLabel}
-                      onChange={(e) => updateVariantField(v._key, 'variantLabel', e.target.value)}
-                      placeholder="e.g. 1kg"
-                    />
-                  </div>
-                  <div className="field narrow">
-                    <label>SKU</label>
-                    <input
-                      type="text"
-                      value={v.sku}
-                      onChange={(e) => updateVariantField(v._key, 'sku', e.target.value)}
-                      placeholder="SKU"
-                    />
-                  </div>
-                  <div className="field narrow">
-                    <label>Unit</label>
-                    <div className="unit-toggle">
-                      {UNITS.map((u) => (
-                        <button
-                          key={u}
-                          type="button"
-                          className={v.unit === u ? 'active' : ''}
-                          onClick={() => updateVariantField(v._key, 'unit', u)}
-                        >
-                          {u}
-                        </button>
-                      ))}
+              {formVariants.map((v) => {
+                const expanded = expandedVariants.has(v._key)
+                return (
+                  <div className="variant-accordion" key={v._key}>
+                    <div className="variant-accordion-header">
+                      <button
+                        type="button"
+                        className={`variant-accordion-toggle${expanded ? ' expanded' : ''}`}
+                        onClick={() => toggleVariantExpanded(v._key)}
+                      >
+                        <span className="accordion-caret">{expanded ? '▾' : '▸'}</span>
+                        <span className="variant-accordion-title">{v.variantLabel || 'New variant'}</span>
+                        {!expanded && v.unitPrice !== '' && (
+                          <span className="variant-accordion-summary">
+                            {formatMoney(v.unitPrice)}/{v.unit} · {v.stockQty || 0} {v.unit} in stock
+                          </span>
+                        )}
+                      </button>
+                      <button type="button" className="btn btn-sm btn-danger" onClick={() => removeVariantRow(v._key)}>×</button>
                     </div>
+                    {expanded && (
+                      <div className="variant-row">
+                        <div className="field">
+                          <label>Variant</label>
+                          <input
+                            type="text"
+                            value={v.variantLabel}
+                            onChange={(e) => updateVariantField(v._key, 'variantLabel', e.target.value)}
+                            placeholder="e.g. 1kg"
+                          />
+                        </div>
+                        <div className="field narrow">
+                          <label>SKU</label>
+                          <input
+                            type="text"
+                            value={v.sku}
+                            onChange={(e) => updateVariantField(v._key, 'sku', e.target.value)}
+                            placeholder="SKU"
+                          />
+                        </div>
+                        <div className="field narrow">
+                          <label>Unit</label>
+                          <div className="unit-toggle">
+                            {UNITS.map((u) => (
+                              <button
+                                key={u}
+                                type="button"
+                                className={v.unit === u ? 'active' : ''}
+                                onClick={() => updateVariantField(v._key, 'unit', u)}
+                              >
+                                {u}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="field narrow">
+                          <label>Purchase price</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={v.purchasePrice}
+                            onChange={(e) => updateVariantField(v._key, 'purchasePrice', e.target.value)}
+                            placeholder={`cost/${v.unit || 'pcs'}`}
+                          />
+                        </div>
+                        <div className="field narrow">
+                          <label>Sell price</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={v.unitPrice}
+                            onChange={(e) => updateVariantField(v._key, 'unitPrice', e.target.value)}
+                            placeholder={`price/${v.unit || 'pcs'}`}
+                          />
+                        </div>
+                        <div className="field narrow">
+                          <label>Stock</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={v.stockQty}
+                            onChange={(e) => updateVariantField(v._key, 'stockQty', e.target.value)}
+                            placeholder="stock"
+                          />
+                        </div>
+                        <div className="field narrow">
+                          <label>Low stock at</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={v.lowStockThreshold}
+                            onChange={(e) => updateVariantField(v._key, 'lowStockThreshold', e.target.value)}
+                            placeholder="alert below"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="field narrow">
-                    <label>Purchase price</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={v.purchasePrice}
-                      onChange={(e) => updateVariantField(v._key, 'purchasePrice', e.target.value)}
-                      placeholder={`cost/${v.unit || 'pcs'}`}
-                    />
-                  </div>
-                  <div className="field narrow">
-                    <label>Sell price</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={v.unitPrice}
-                      onChange={(e) => updateVariantField(v._key, 'unitPrice', e.target.value)}
-                      placeholder={`price/${v.unit || 'pcs'}`}
-                    />
-                  </div>
-                  <div className="field narrow">
-                    <label>Stock</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={v.stockQty}
-                      onChange={(e) => updateVariantField(v._key, 'stockQty', e.target.value)}
-                      placeholder="stock"
-                    />
-                  </div>
-                  <div className="field narrow">
-                    <label>Low stock at</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={v.lowStockThreshold}
-                      onChange={(e) => updateVariantField(v._key, 'lowStockThreshold', e.target.value)}
-                      placeholder="alert below"
-                    />
-                  </div>
-                  <button type="button" className="btn btn-sm btn-danger variant-remove" onClick={() => removeVariantRow(v._key)}>×</button>
-                </div>
-              ))}
+                )
+              })}
               <button type="button" className="btn-link" onClick={addVariantRow} style={{ marginBottom: 12 }}>
                 + add variant
               </button>
