@@ -2,8 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
 import { formatMoney, formatUnitPrice } from '../lib/currency'
 
+const UNITS = ['pcs', 'kg', 'litre', 'packet']
+
 function normalizeUnit(unit) {
-  return (unit || '').trim().toLowerCase().startsWith('k') ? 'kg' : 'pcs'
+  const u = (unit || '').trim().toLowerCase()
+  if (UNITS.includes(u)) return u
+  if (u.startsWith('k')) return 'kg'
+  if (u.startsWith('l')) return 'litre'
+  if (u.startsWith('pack') || u.startsWith('box')) return 'packet'
+  return 'pcs'
 }
 
 function emptyVariant() {
@@ -13,6 +20,7 @@ function emptyVariant() {
     variantLabel: '',
     sku: '',
     unit: 'pcs',
+    purchasePrice: '',
     unitPrice: '',
     stockQty: '',
     lowStockThreshold: '',
@@ -26,6 +34,7 @@ export default function Inventory() {
   const [editingProduct, setEditingProduct] = useState(null)
   const [formName, setFormName] = useState('')
   const [formCategory, setFormCategory] = useState('')
+  const [formDescription, setFormDescription] = useState('')
   const [formVariants, setFormVariants] = useState([emptyVariant()])
   const [removedVariantIds, setRemovedVariantIds] = useState([])
   const [saving, setSaving] = useState(false)
@@ -61,6 +70,7 @@ export default function Inventory() {
     setEditingProduct(null)
     setFormName('')
     setFormCategory('')
+    setFormDescription('')
     setFormVariants([emptyVariant()])
     setRemovedVariantIds([])
     setFormError('')
@@ -71,6 +81,7 @@ export default function Inventory() {
     setEditingProduct(product)
     setFormName(product.name)
     setFormCategory(product.category || '')
+    setFormDescription(product.description || '')
     setFormVariants(
       (product.product_variants || []).map((v) => ({
         _key: v.id,
@@ -78,6 +89,7 @@ export default function Inventory() {
         variantLabel: v.variant_label,
         sku: v.sku || '',
         unit: normalizeUnit(v.unit),
+        purchasePrice: String(v.purchase_price ?? 0),
         unitPrice: String(v.unit_price),
         stockQty: String(v.stock_qty),
         lowStockThreshold: String(v.low_stock_threshold),
@@ -120,6 +132,7 @@ export default function Inventory() {
         variantLabel: v.variantLabel.trim(),
         sku: v.sku.trim(),
         unit: v.unit.trim() || 'pcs',
+        purchasePrice: Number(v.purchasePrice) || 0,
         unitPrice: Number(v.unitPrice),
         stockQty: Number(v.stockQty) || 0,
         lowStockThreshold: Number(v.lowStockThreshold) || 0,
@@ -128,10 +141,11 @@ export default function Inventory() {
     setSaving(true)
     setFormError('')
     try {
+      const body = { name: formName.trim(), category: formCategory.trim(), description: formDescription.trim() }
       if (editingProduct) {
-        await api.updateProduct(editingProduct.id, { name: formName.trim(), category: formCategory.trim(), variants, removedVariantIds })
+        await api.updateProduct(editingProduct.id, { ...body, variants, removedVariantIds })
       } else {
-        await api.createProduct({ name: formName.trim(), category: formCategory.trim(), variants })
+        await api.createProduct({ ...body, variants })
       }
       setModalOpen(false)
       load()
@@ -191,7 +205,8 @@ export default function Inventory() {
                 <th>Product</th>
                 <th>Variant</th>
                 <th>SKU</th>
-                <th>Unit price</th>
+                <th>Purchase price</th>
+                <th>Sell price</th>
                 <th>Stock</th>
                 <th></th>
               </tr>
@@ -203,7 +218,7 @@ export default function Inventory() {
                   return (
                     <tr key={product.id}>
                       <td>{product.name}</td>
-                      <td colSpan={3} style={{ color: 'var(--muted)' }}>no variants</td>
+                      <td colSpan={4} style={{ color: 'var(--muted)' }}>no variants</td>
                       <td></td>
                       <td>
                         <button type="button" className="btn btn-sm" onClick={() => openEditModal(product)}>edit</button>{' '}
@@ -219,6 +234,7 @@ export default function Inventory() {
                       {i === 0 && <td rowSpan={variants.length}>{product.name}</td>}
                       <td>{v.variant_label}</td>
                       <td>{v.sku || '—'}</td>
+                      <td>{formatUnitPrice(v.purchase_price ?? 0, v.unit)}</td>
                       <td>{formatUnitPrice(v.unit_price, v.unit)}</td>
                       <td className={low ? 'stock-low' : ''}>
                         {v.stock_qty} {v.unit}
@@ -254,6 +270,15 @@ export default function Inventory() {
                   <input type="text" value={formCategory} onChange={(e) => setFormCategory(e.target.value)} placeholder="e.g. Adhesives" />
                 </div>
               </div>
+              <div className="field">
+                <label>Description (optional)</label>
+                <textarea
+                  rows={2}
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
+                  placeholder="Notes about this product…"
+                />
+              </div>
 
               <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Variants</label>
               {formVariants.map((v) => (
@@ -279,24 +304,31 @@ export default function Inventory() {
                   <div className="field narrow">
                     <label>Unit</label>
                     <div className="unit-toggle">
-                      <button
-                        type="button"
-                        className={v.unit === 'pcs' ? 'active' : ''}
-                        onClick={() => updateVariantField(v._key, 'unit', 'pcs')}
-                      >
-                        pcs
-                      </button>
-                      <button
-                        type="button"
-                        className={v.unit === 'kg' ? 'active' : ''}
-                        onClick={() => updateVariantField(v._key, 'unit', 'kg')}
-                      >
-                        kg
-                      </button>
+                      {UNITS.map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          className={v.unit === u ? 'active' : ''}
+                          onClick={() => updateVariantField(v._key, 'unit', u)}
+                        >
+                          {u}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   <div className="field narrow">
-                    <label>Price/unit</label>
+                    <label>Purchase price</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={v.purchasePrice}
+                      onChange={(e) => updateVariantField(v._key, 'purchasePrice', e.target.value)}
+                      placeholder={`cost/${v.unit || 'pcs'}`}
+                    />
+                  </div>
+                  <div className="field narrow">
+                    <label>Sell price</label>
                     <input
                       type="number"
                       min="0"
