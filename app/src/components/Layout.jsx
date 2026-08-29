@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { to: '/', label: 'Inventory' },
   { to: '/invoices', label: 'Invoices' },
   { to: '/invoices/new', label: 'New Invoice' },
+  { to: '/purchases', label: 'Purchases' },
   { to: '/stats', label: 'Stats' },
 ]
 

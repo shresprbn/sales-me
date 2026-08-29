@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatMoney } from '../lib/currency'
@@ -10,6 +10,7 @@ function formatDate(iso) {
 export default function Invoices() {
   const [invoices, setInvoices] = useState([])
   const [status, setStatus] = useState('loading')
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     api
@@ -21,6 +22,17 @@ export default function Invoices() {
       .catch(() => setStatus('error'))
   }, [])
 
+  const filteredInvoices = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return invoices
+    return invoices.filter(
+      (inv) =>
+        inv.invoice_number.toLowerCase().includes(q) ||
+        (inv.customer_name || '').toLowerCase().includes(q) ||
+        (inv.customer_phone || '').toLowerCase().includes(q),
+    )
+  }, [invoices, search])
+
   return (
     <div>
       <div className="page-header">
@@ -31,13 +43,26 @@ export default function Invoices() {
         <Link to="/invoices/new" className="btn btn-primary">+ new invoice</Link>
       </div>
 
+      {status === 'ready' && invoices.length > 0 && (
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="search invoice #, customer, phone…"
+          style={{ width: '100%', maxWidth: 320, border: '1px solid var(--border)', borderRadius: 8, padding: '9px 11px', marginBottom: 16 }}
+        />
+      )}
+
       {status === 'loading' && <p className="empty-state">loading…</p>}
       {status === 'error' && <p className="empty-state">couldn't load invoices — try refreshing</p>}
       {status === 'ready' && invoices.length === 0 && (
         <div className="card empty-state">No invoices yet.</div>
       )}
+      {status === 'ready' && invoices.length > 0 && filteredInvoices.length === 0 && (
+        <div className="card empty-state">No invoices match "{search}".</div>
+      )}
 
-      {status === 'ready' && invoices.length > 0 && (
+      {status === 'ready' && filteredInvoices.length > 0 && (
         <div className="card" style={{ padding: 0 }}>
           <table>
             <thead>
@@ -50,7 +75,7 @@ export default function Invoices() {
               </tr>
             </thead>
             <tbody>
-              {invoices.map((inv) => (
+              {filteredInvoices.map((inv) => (
                 <tr key={inv.id}>
                   <td><Link to={`/invoices/${inv.id}`} className="btn-link">{inv.invoice_number}</Link></td>
                   <td>{inv.customer_name || 'Walk-in customer'}</td>

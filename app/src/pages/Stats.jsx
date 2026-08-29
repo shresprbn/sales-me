@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatMoney } from '../lib/currency'
 
 function startOfMonth() {
   const d = new Date()
   return new Date(d.getFullYear(), d.getMonth(), 1)
+}
+
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 export default function Stats() {
@@ -31,11 +36,22 @@ export default function Stats() {
     return rows.sort((a, b) => Number(b.stock_qty) * Number(b.unit_price) - Number(a.stock_qty) * Number(a.unit_price))
   }, [products])
 
+  const outOfStock = useMemo(() => stockByVariant.filter((v) => Number(v.stock_qty) <= 0), [stockByVariant])
+  const lowStock = useMemo(
+    () => stockByVariant.filter((v) => Number(v.stock_qty) > 0 && Number(v.stock_qty) <= Number(v.low_stock_threshold)),
+    [stockByVariant],
+  )
+
   const inventoryStats = useMemo(() => {
     const stockValue = stockByVariant.reduce((sum, v) => sum + Number(v.stock_qty) * Number(v.unit_price), 0)
-    const lowStockCount = stockByVariant.filter((v) => Number(v.stock_qty) <= Number(v.low_stock_threshold)).length
-    return { productCount: products.length, variantCount: stockByVariant.length, stockValue, lowStockCount }
-  }, [products, stockByVariant])
+    return {
+      productCount: products.length,
+      variantCount: stockByVariant.length,
+      stockValue,
+      lowStockCount: lowStock.length,
+      outOfStockCount: outOfStock.length,
+    }
+  }, [products, stockByVariant, lowStock, outOfStock])
 
   const salesStats = useMemo(() => {
     const monthStart = startOfMonth()
@@ -48,8 +64,8 @@ export default function Stats() {
     const monthRevenue = thisMonth.reduce((sum, inv) => sum + Number(inv.total), 0)
     return {
       invoiceCount: invoices.length,
-      paidCount: paid.length,
-      unpaidCount: unpaid.length,
+      paid,
+      unpaid,
       voidCount: invoices.length - active.length,
       totalRevenue,
       outstanding,
@@ -125,12 +141,72 @@ export default function Stats() {
               <span className="stat-value">{formatMoney(inventoryStats.stockValue)}</span>
             </div>
             <div className="stat-tile">
+              <span className="stat-label">Out of stock</span>
+              <span className={`stat-value${inventoryStats.outOfStockCount ? ' stat-warn' : ''}`}>
+                {inventoryStats.outOfStockCount}
+              </span>
+            </div>
+            <div className="stat-tile">
               <span className="stat-label">Low stock</span>
               <span className={`stat-value${inventoryStats.lowStockCount ? ' stat-warn' : ''}`}>
                 {inventoryStats.lowStockCount}
               </span>
             </div>
           </div>
+
+          {outOfStock.length > 0 && (
+            <>
+              <h3 style={{ fontSize: 13, fontWeight: 700, margin: '20px 0 10px' }}>Out of stock</h3>
+              <div className="card" style={{ padding: 0 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th>Variant</th>
+                      <th>Sell price</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {outOfStock.map((v) => (
+                      <tr key={v.id}>
+                        <td>{v.productName}</td>
+                        <td>{v.variant_label}</td>
+                        <td className="stock-low">{formatMoney(v.unit_price)}/{v.unit}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {lowStock.length > 0 && (
+            <>
+              <h3 style={{ fontSize: 13, fontWeight: 700, margin: '20px 0 10px' }}>Low stock</h3>
+              <div className="card" style={{ padding: 0 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th>Variant</th>
+                      <th>Stock</th>
+                      <th>Threshold</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lowStock.map((v) => (
+                      <tr key={v.id}>
+                        <td>{v.productName}</td>
+                        <td>{v.variant_label}</td>
+                        <td className="stock-low">{v.stock_qty} {v.unit}</td>
+                        <td>{v.low_stock_threshold} {v.unit}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
 
           <h3 style={{ fontSize: 13, fontWeight: 700, margin: '20px 0 10px' }}>Stock by product</h3>
           {stockByVariant.length === 0 && <p className="empty-state">No products yet.</p>}
@@ -141,7 +217,8 @@ export default function Stats() {
                   <tr>
                     <th>Product</th>
                     <th>Variant</th>
-                    <th>Unit price</th>
+                    <th>Purchase price</th>
+                    <th>Sell price</th>
                     <th>Stock</th>
                     <th>Stock value</th>
                   </tr>
@@ -153,6 +230,7 @@ export default function Stats() {
                       <tr key={v.id}>
                         <td>{v.productName}</td>
                         <td>{v.variant_label}</td>
+                        <td>{formatMoney(v.purchase_price ?? 0)}/{v.unit}</td>
                         <td>{formatMoney(v.unit_price)}/{v.unit}</td>
                         <td className={low ? 'stock-low' : ''}>
                           {v.stock_qty} {v.unit}
@@ -189,11 +267,11 @@ export default function Stats() {
             </div>
             <div className="stat-tile">
               <span className="stat-label">Paid</span>
-              <span className="stat-value">{salesStats.paidCount}</span>
+              <span className="stat-value">{salesStats.paid.length}</span>
             </div>
             <div className="stat-tile">
               <span className="stat-label">Unpaid</span>
-              <span className="stat-value">{salesStats.unpaidCount}</span>
+              <span className="stat-value">{salesStats.unpaid.length}</span>
             </div>
             <div className="stat-tile">
               <span className="stat-label">Void</span>
@@ -204,6 +282,62 @@ export default function Stats() {
               <span className="stat-value">{formatMoney(salesStats.avgInvoice)}</span>
             </div>
           </div>
+
+          {salesStats.unpaid.length > 0 && (
+            <>
+              <h3 style={{ fontSize: 13, fontWeight: 700, margin: '20px 0 10px' }}>Unpaid invoices</h3>
+              <div className="card" style={{ padding: 0 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Invoice</th>
+                      <th>Customer</th>
+                      <th>Date</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salesStats.unpaid.map((inv) => (
+                      <tr key={inv.id}>
+                        <td><Link to={`/invoices/${inv.id}`} className="btn-link">{inv.invoice_number}</Link></td>
+                        <td>{inv.customer_name || 'Walk-in customer'}</td>
+                        <td>{formatDate(inv.created_at)}</td>
+                        <td className="stock-low">{formatMoney(inv.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {salesStats.paid.length > 0 && (
+            <>
+              <h3 style={{ fontSize: 13, fontWeight: 700, margin: '20px 0 10px' }}>Paid invoices</h3>
+              <div className="card" style={{ padding: 0 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Invoice</th>
+                      <th>Customer</th>
+                      <th>Date</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salesStats.paid.map((inv) => (
+                      <tr key={inv.id}>
+                        <td><Link to={`/invoices/${inv.id}`} className="btn-link">{inv.invoice_number}</Link></td>
+                        <td>{inv.customer_name || 'Walk-in customer'}</td>
+                        <td>{formatDate(inv.created_at)}</td>
+                        <td>{formatMoney(inv.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
 
           <h3 style={{ fontSize: 13, fontWeight: 700, margin: '20px 0 10px' }}>Sales by month</h3>
           {salesByMonth.length === 0 && <p className="empty-state">No sales yet.</p>}
