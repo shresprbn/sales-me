@@ -147,6 +147,8 @@ tr:last-child td { border-bottom: none; }
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .03em;
+  background: #f3f4f6;
+  color: #374151;
 }
 .tag-unpaid { background: #fef3c7; color: #92400e; }
 .tag-paid { background: #dcfce7; color: #166534; }
@@ -217,6 +219,8 @@ tr:last-child td { border-bottom: none; }
   cursor: pointer;
 }
 .unit-toggle button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.payment-toggle { grid-template-columns: repeat(3, 1fr); }
+.payment-toggle button { padding: 9px 0; font-size: 13px; }
 .variant-accordion { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
 .variant-accordion-header { display: flex; align-items: stretch; gap: 8px; background: var(--bg); }
 .variant-accordion-toggle {

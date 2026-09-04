@@ -97,6 +97,11 @@ create table if not exists purchases (
   qty numeric(10,2) not null check (qty > 0),
   cost_price numeric(10,2) not null check (cost_price >= 0),
   total_cost numeric(10,2) not null,
+  -- cash/bank are settled on the spot (amount_paid = total_cost at creation);
+  -- credit can be partially or fully unpaid — balance due is total_cost minus
+  -- amount_paid, computed on read rather than stored, so it can't drift.
+  payment_method text not null default 'cash' check (payment_method in ('cash', 'bank', 'credit')),
+  amount_paid numeric(10,2) not null default 0 check (amount_paid >= 0),
   notes text,
   created_at timestamptz not null default now()
 );

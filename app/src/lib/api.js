@@ -62,4 +62,5 @@ export const api = {
 
   listPurchases: (params) => request(`/purchases${pagingQuery(params)}`),
   createPurchase: (body) => request('/purchases', { method: 'POST', body: JSON.stringify(body) }),
+  recordPurchasePayment: (id, amount) => request(`/purchases/${id}/payment`, { method: 'PATCH', body: JSON.stringify({ amount }) }),
 }

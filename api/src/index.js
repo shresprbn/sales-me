@@ -9,6 +9,7 @@
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const INVOICE_STATUSES = ['unpaid', 'paid', 'void']
+const PAYMENT_METHODS = ['cash', 'bank', 'credit']
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days — this is just for you, favor convenience over rotation
 
 function cleanText(value, maxLen) {
@@ -559,6 +560,14 @@ async function handleCreatePurchase(request, env, headers) {
   const sellPrice = Number(payload.sellPrice)
   const hasSellPrice = Number.isFinite(sellPrice) && sellPrice >= 0
 
+  const totalCost = Math.round(qty * costPrice * 100) / 100
+  const paymentMethod = PAYMENT_METHODS.includes(payload.paymentMethod) ? payload.paymentMethod : 'cash'
+  // cash/bank are settled immediately; credit can be partially paid (or
+  // nothing at all) up front — whatever's given is clamped to the total so
+  // it can never overpay.
+  const amountPaid =
+    paymentMethod === 'credit' ? Math.max(0, Math.min(totalCost, Number(payload.amountPaid) || 0)) : totalCost
+
   const row = {
     variant_id: variantId,
     product_name: productName,
@@ -566,7 +575,9 @@ async function handleCreatePurchase(request, env, headers) {
     supplier: cleanText(payload.supplier, 200) || null,
     qty,
     cost_price: costPrice,
-    total_cost: Math.round(qty * costPrice * 100) / 100,
+    total_cost: totalCost,
+    payment_method: paymentMethod,
+    amount_paid: amountPaid,
     notes: cleanText(payload.notes, 500) || null,
   }
 
@@ -603,6 +614,41 @@ async function handleCreatePurchase(request, env, headers) {
   }
 
   return json(purchase, 201, headers)
+}
+
+// Adds to a credit purchase's amount_paid — paying down a supplier balance
+// over time. Not for cash/bank purchases, which are already fully paid.
+async function handleRecordPurchasePayment(request, env, headers, id) {
+  if (!UUID_RE.test(id)) return json({ error: 'Invalid purchase id' }, 400, headers)
+  let payload
+  try {
+    payload = await request.json()
+  } catch {
+    return json({ error: 'Invalid JSON body' }, 400, headers)
+  }
+  const amount = Number(payload.amount)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return json({ error: 'Enter a valid payment amount' }, 400, headers)
+  }
+
+  const currentRes = await fetch(`${env.SUPABASE_URL}/rest/v1/purchases?id=eq.${id}&select=payment_method,total_cost,amount_paid`, {
+    headers: supabaseHeaders(env),
+  })
+  const [current] = currentRes.ok ? await currentRes.json() : []
+  if (!current) return json({ error: 'Purchase not found' }, 404, headers)
+  if (current.payment_method !== 'credit') {
+    return json({ error: 'Only credit purchases can take additional payments' }, 400, headers)
+  }
+
+  const amountPaid = Math.min(Number(current.total_cost), Number(current.amount_paid) + amount)
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/purchases?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: supabaseHeaders(env, { 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+    body: JSON.stringify({ amount_paid: amountPaid }),
+  })
+  if (!res.ok) return json({ error: 'Could not record payment' }, 502, headers)
+  const [purchase] = await res.json()
+  return json(purchase, 200, headers)
 }
 
 export default {
@@ -670,6 +716,10 @@ export default {
     }
     if (url.pathname === '/purchases' && request.method === 'POST') {
       return handleCreatePurchase(request, env, headers)
+    }
+    const purchasePaymentMatch = url.pathname.match(/^\/purchases\/([^/]+)\/payment$/)
+    if (purchasePaymentMatch && request.method === 'PATCH') {
+      return handleRecordPurchasePayment(request, env, headers, purchasePaymentMatch[1])
     }
 
     return json({ error: 'Not found' }, 404, headers)

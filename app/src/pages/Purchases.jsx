@@ -25,9 +25,16 @@ export default function Purchases() {
   const [qty, setQty] = useState('')
   const [costPrice, setCostPrice] = useState('')
   const [sellPrice, setSellPrice] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('cash')
+  const [amountPaid, setAmountPaid] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
+
+  const [payModalOpen, setPayModalOpen] = useState(null) // purchase row being paid down, or null
+  const [payAmount, setPayAmount] = useState('')
+  const [paying, setPaying] = useState(false)
+  const [payError, setPayError] = useState('')
 
   const [newProductModalOpen, setNewProductModalOpen] = useState(false)
   const [newProductName, setNewProductName] = useState('')
@@ -121,6 +128,8 @@ export default function Purchases() {
     setQty('')
     setCostPrice(variant.purchasePrice ? String(variant.purchasePrice) : '')
     setSellPrice(variant.unitPrice ? String(variant.unitPrice) : '')
+    setPaymentMethod('cash')
+    setAmountPaid('')
     setNotes('')
     setFormError('')
   }
@@ -205,6 +214,8 @@ export default function Purchases() {
         qty: qtyNum,
         costPrice: costNum,
         sellPrice: sellNum,
+        paymentMethod,
+        amountPaid: paymentMethod === 'credit' ? Number(amountPaid) || 0 : undefined,
         notes: notes.trim(),
       })
       setPendingVariant(null)
@@ -213,6 +224,32 @@ export default function Purchases() {
       setFormError(err.message || 'Could not record purchase')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const openPayModal = (purchase) => {
+    setPayModalOpen(purchase)
+    setPayAmount('')
+    setPayError('')
+  }
+
+  const handlePay = async (e) => {
+    e.preventDefault()
+    const amount = Number(payAmount)
+    if (!amount || amount <= 0) {
+      setPayError('Enter a valid amount')
+      return
+    }
+    setPaying(true)
+    setPayError('')
+    try {
+      await api.recordPurchasePayment(payModalOpen.id, amount)
+      setPayModalOpen(null)
+      reload()
+    } catch (err) {
+      setPayError(err.message || 'Could not record payment')
+    } finally {
+      setPaying(false)
     }
   }
 
@@ -247,20 +284,34 @@ export default function Purchases() {
                   <th>Qty</th>
                   <th>Cost/unit</th>
                   <th>Total cost</th>
+                  <th>Payment</th>
                 </tr>
               </thead>
               <tbody>
-                {purchases.map((p) => (
-                  <tr key={p.id}>
-                    <td>{formatDate(p.created_at)}</td>
-                    <td>{p.product_name}</td>
-                    <td>{p.variant_label}</td>
-                    <td>{p.supplier || '—'}</td>
-                    <td>{p.qty}</td>
-                    <td>{formatMoney(p.cost_price)}</td>
-                    <td>{formatMoney(p.total_cost)}</td>
-                  </tr>
-                ))}
+                {purchases.map((p) => {
+                  const balance = Math.max(0, Number(p.total_cost) - Number(p.amount_paid ?? p.total_cost))
+                  return (
+                    <tr key={p.id}>
+                      <td>{formatDate(p.created_at)}</td>
+                      <td>{p.product_name}</td>
+                      <td>{p.variant_label}</td>
+                      <td>{p.supplier || '—'}</td>
+                      <td>{p.qty}</td>
+                      <td>{formatMoney(p.cost_price)}</td>
+                      <td>{formatMoney(p.total_cost)}</td>
+                      <td>
+                        {p.payment_method !== 'credit' && <span className="tag">{p.payment_method}</span>}
+                        {p.payment_method === 'credit' && balance > 0 && (
+                          <>
+                            <span className="stock-low">{formatMoney(balance)} due</span>{' '}
+                            <button type="button" className="btn btn-sm" onClick={() => openPayModal(p)}>pay</button>
+                          </>
+                        )}
+                        {p.payment_method === 'credit' && balance <= 0 && <span className="tag tag-paid">paid off</span>}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -361,6 +412,32 @@ export default function Purchases() {
                 <input type="number" min="0" step="0.01" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} />
               </div>
               <div className="field">
+                <label>Payment</label>
+                <div className="unit-toggle payment-toggle">
+                  {['cash', 'bank', 'credit'].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={paymentMethod === m ? 'active' : ''}
+                      onClick={() => setPaymentMethod(m)}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {paymentMethod === 'credit' && (
+                <div className="field">
+                  <label>Paid now (optional — rest stays as credit)</label>
+                  <input type="number" min="0" step="0.01" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} placeholder="0" />
+                  {Number(qty) > 0 && Number(costPrice) >= 0 && (
+                    <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0 0' }}>
+                      Balance due: {formatMoney(Math.max(0, Number(qty) * Number(costPrice) - (Number(amountPaid) || 0)))}
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="field">
                 <label>Supplier (optional)</label>
                 <input type="text" value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. ABC Traders" />
               </div>
@@ -452,6 +529,32 @@ export default function Purchases() {
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={creatingProduct}>
                   {creatingProduct ? 'creating…' : 'create & continue'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {payModalOpen && (
+        <div className="modal-overlay" onClick={() => !paying && setPayModalOpen(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2 className="modal-title">Pay {payModalOpen.product_name} — {payModalOpen.variant_label}</h2>
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: -10, marginBottom: 16 }}>
+              Balance due: {formatMoney(Math.max(0, Number(payModalOpen.total_cost) - Number(payModalOpen.amount_paid ?? 0)))}
+            </p>
+            <form onSubmit={handlePay}>
+              <div className="field">
+                <label>Amount</label>
+                <input type="number" min="0.01" step="0.01" autoFocus value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+              </div>
+
+              {payError && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{payError}</p>}
+
+              <div className="modal-actions">
+                <button type="button" className="btn" onClick={() => setPayModalOpen(null)} disabled={paying}>cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={paying}>
+                  {paying ? 'saving…' : 'record payment'}
                 </button>
               </div>
             </form>

@@ -213,7 +213,19 @@ export default function Stats() {
     const monthStart = startOfMonth()
     const totalSpent = purchases.reduce((sum, p) => sum + Number(p.total_cost), 0)
     const monthSpent = purchases.filter((p) => new Date(p.created_at) >= monthStart).reduce((sum, p) => sum + Number(p.total_cost), 0)
-    return { count: purchases.length, totalSpent, monthSpent }
+    const outstandingCredit = purchases.reduce(
+      (sum, p) => (p.payment_method === 'credit' ? sum + Math.max(0, Number(p.total_cost) - Number(p.amount_paid ?? 0)) : sum),
+      0,
+    )
+    return { count: purchases.length, totalSpent, monthSpent, outstandingCredit }
+  }, [purchases])
+
+  const creditPurchases = useMemo(() => {
+    return purchases
+      .filter((p) => p.payment_method === 'credit')
+      .map((p) => ({ ...p, balance: Math.max(0, Number(p.total_cost) - Number(p.amount_paid ?? 0)) }))
+      .filter((p) => p.balance > 0)
+      .sort((a, b) => b.balance - a.balance)
   }, [purchases])
 
   const purchasesBySupplier = useMemo(() => {
@@ -690,7 +702,34 @@ export default function Stats() {
               <span className="stat-label">Spent this month</span>
               <span className="stat-value">{formatMoney(purchaseStats.monthSpent)}</span>
             </div>
+            <div className="stat-tile">
+              <span className="stat-label">Owed on credit</span>
+              <span className={`stat-value${purchaseStats.outstandingCredit ? ' stat-warn' : ''}`}>
+                {formatMoney(purchaseStats.outstandingCredit)}
+              </span>
+            </div>
           </div>
+
+          {creditPurchases.length > 0 && (
+            <>
+              <h3 className="stats-subhead">Owed to suppliers (credit)</h3>
+              <div className="card" style={{ padding: 0 }}>
+                <table>
+                  <thead><tr><th>Date</th><th>Product</th><th>Supplier</th><th>Balance due</th></tr></thead>
+                  <tbody>
+                    {creditPurchases.map((p) => (
+                      <tr key={p.id}>
+                        <td>{formatDate(p.created_at)}</td>
+                        <td>{p.product_name} — {p.variant_label}</td>
+                        <td>{p.supplier || '—'}</td>
+                        <td className="stock-low">{formatMoney(p.balance)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
 
           {purchasesBySupplier.length === 0 && <p className="empty-state" style={{ marginTop: 16 }}>No purchases logged yet.</p>}
 
