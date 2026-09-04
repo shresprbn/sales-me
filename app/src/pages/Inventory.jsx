@@ -234,13 +234,7 @@ export default function Inventory() {
 
       {status === 'ready' && lowStockVariants.length > 0 && (
         <div className="alert-banner">
-          <strong>⚠ {lowStockVariants.length} variant{lowStockVariants.length > 1 ? 's' : ''} low on stock:</strong>{' '}
-          {lowStockVariants.map((v, i) => (
-            <span key={v.id}>
-              {i > 0 && ', '}
-              {v.productName} ({v.variant_label}) — {v.stock_qty} {v.unit} left
-            </span>
-          ))}
+          ⚠ {lowStockVariants.length} variant{lowStockVariants.length > 1 ? 's' : ''} low on stock
         </div>
       )}
 
