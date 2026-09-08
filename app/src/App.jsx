@@ -8,6 +8,7 @@ import NewInvoice from './pages/NewInvoice'
 import InvoiceDetail from './pages/InvoiceDetail'
 import Stats from './pages/Stats'
 import Purchases from './pages/Purchases'
+import NewPurchase from './pages/NewPurchase'
 
 function Protected({ children }) {
   return (
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/invoices/:id" element={<Protected><InvoiceDetail /></Protected>} />
         <Route path="/stats" element={<Protected><Stats /></Protected>} />
         <Route path="/purchases" element={<Protected><Purchases /></Protected>} />
+        <Route path="/purchases/new" element={<Protected><NewPurchase /></Protected>} />
       </Routes>
     </BrowserRouter>
   )

@@ -42,6 +42,7 @@ export default function Inventory() {
   const [formVariants, setFormVariants] = useState([emptyVariant()])
   const [expandedVariants, setExpandedVariants] = useState(() => new Set())
   const [removedVariantIds, setRemovedVariantIds] = useState([])
+  const [confirmRemoveKey, setConfirmRemoveKey] = useState(null) // variant _key pending a "really remove?" confirmation
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const [search, setSearch] = useState('')
@@ -153,7 +154,17 @@ export default function Inventory() {
     setExpandedVariants((prev) => new Set(prev).add(next._key)) // new row is empty, open it right away
   }
 
-  const removeVariantRow = (key) => {
+  // Removing a variant is destructive (deletes its stock/price/SKU history
+  // once saved) and easy to hit by accident next to the accordion toggle, so
+  // it needs an explicit confirm step rather than removing immediately.
+  const requestRemoveVariant = (key) => {
+    setConfirmRemoveKey(key)
+  }
+
+  const cancelRemoveVariant = () => setConfirmRemoveKey(null)
+
+  const confirmRemoveVariant = () => {
+    const key = confirmRemoveKey
     const variant = formVariants.find((v) => v._key === key)
     if (variant?.id) setRemovedVariantIds((prev) => [...prev, variant.id])
     setFormVariants((prev) => prev.filter((v) => v._key !== key))
@@ -162,6 +173,7 @@ export default function Inventory() {
       next.delete(key)
       return next
     })
+    setConfirmRemoveKey(null)
   }
 
   const toggleVariantExpanded = (key) => {
@@ -369,7 +381,7 @@ export default function Inventory() {
                           </span>
                         )}
                       </button>
-                      <button type="button" className="btn btn-sm btn-danger" onClick={() => removeVariantRow(v._key)}>×</button>
+                      <button type="button" className="btn btn-sm btn-danger" onClick={() => requestRemoveVariant(v._key)}>×</button>
                     </div>
                     {expanded && (
                       <div className="variant-row">
@@ -468,6 +480,22 @@ export default function Inventory() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {confirmRemoveKey && (
+        <div className="modal-overlay" onClick={cancelRemoveVariant}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
+            <h2 className="modal-title">Remove variant?</h2>
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>
+              "{formVariants.find((v) => v._key === confirmRemoveKey)?.variantLabel || 'This variant'}" will be deleted
+              once you save — its stock, price, and SKU won't be recoverable.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="btn" onClick={cancelRemoveVariant}>cancel</button>
+              <button type="button" className="btn btn-danger" onClick={confirmRemoveVariant}>remove variant</button>
+            </div>
           </div>
         </div>
       )}

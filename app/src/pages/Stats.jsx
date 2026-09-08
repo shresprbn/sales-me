@@ -27,6 +27,22 @@ function monthKey(iso) {
   return { key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleDateString(undefined, { year: 'numeric', month: 'long' }) }
 }
 
+// An invoice's discount reduces revenue below the sum of its items' line
+// totals, but each invoice_items row is a pre-discount snapshot. Prorate the
+// parent invoice's discount across its items (proportional to line_total) so
+// per-item revenue — and anything built from it, like profit — reflects what
+// was actually earned rather than the pre-discount sticker total. Tax is
+// deliberately excluded here too: it's collected on the business's behalf,
+// not income.
+function effectiveRevenue(it) {
+  const lineTotal = Number(it.line_total) || 0
+  const subtotal = Number(it.invoices?.subtotal) || 0
+  if (!subtotal) return lineTotal
+  const discount = Number(it.invoices?.discount_amount) || 0
+  const ratio = Math.max(0, (subtotal - discount) / subtotal)
+  return lineTotal * ratio
+}
+
 export default function Stats() {
   const [activeTab, setActiveTab] = useState('overview')
   const [products, setProducts] = useState([])
@@ -165,7 +181,7 @@ export default function Stats() {
       const key = `${it.product_name} — ${it.variant_label}`
       const entry = map.get(key) || { productName: it.product_name, variantLabel: it.variant_label, unit: it.unit, qty: 0, revenue: 0 }
       entry.qty += Number(it.qty)
-      entry.revenue += Number(it.line_total)
+      entry.revenue += effectiveRevenue(it)
       map.set(key, entry)
     }
     return [...map.values()].sort((a, b) => b.revenue - a.revenue)
@@ -176,7 +192,7 @@ export default function Stats() {
     for (const it of activeInvoiceItems) {
       const category = (it.variant_id && variantMeta.get(it.variant_id)?.category) || 'Uncategorized'
       const entry = map.get(category) || { category, qty: 0, revenue: 0 }
-      entry.revenue += Number(it.line_total)
+      entry.revenue += effectiveRevenue(it)
       entry.qty += Number(it.qty)
       map.set(category, entry)
     }
@@ -275,7 +291,7 @@ export default function Stats() {
     const byProduct = new Map()
     for (const it of activeInvoiceItems) {
       const meta = it.variant_id ? variantMeta.get(it.variant_id) : null
-      const revenue = Number(it.line_total)
+      const revenue = effectiveRevenue(it)
       if (!meta) {
         revenueUnknown += revenue
         continue

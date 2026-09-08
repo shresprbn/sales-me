@@ -9,7 +9,7 @@ export const BUSINESS_INFO = {
   address: 'Duwakot, Changunarayan-2, Bhaktapur',
   phone: '9843625922',
   email: '',
-  vatNo: '119446944',
+  panNo: '119446944',
 }
 
 function formatDate(iso) {
@@ -127,19 +127,19 @@ export function buildInvoicePdf(invoice) {
     : `Ph No.: ${BUSINESS_INFO.phone}`
   doc.text(contactLine, PAGE_W / 2, y, { align: 'center' })
 
-  // VAT No, boxed digits, top-left — same row as the business name block
-  if (BUSINESS_INFO.vatNo) {
+  // PAN No, boxed digits, top-left — same row as the business name block
+  if (BUSINESS_INFO.panNo) {
     const vatLabelY = 46
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8.5)
     doc.setTextColor(90)
-    doc.text('VAT No.:', MARGIN_X, vatLabelY)
+    doc.text('PAN No.:', MARGIN_X, vatLabelY)
     const boxY = vatLabelY + 6
     const boxSize = 13
     doc.setDrawColor(130)
     doc.setFontSize(9)
     let bx = MARGIN_X
-    for (const digit of String(BUSINESS_INFO.vatNo)) {
+    for (const digit of String(BUSINESS_INFO.panNo)) {
       doc.rect(bx, boxY, boxSize, boxSize)
       doc.setTextColor(20)
       doc.text(digit, bx + boxSize / 2, boxY + boxSize - 3.5, { align: 'center' })
@@ -280,7 +280,7 @@ export function buildInvoicePdf(invoice) {
     totalsRows.push(['Taxable', formatMoney(Number(invoice.subtotal) - Number(invoice.discount_amount))])
   }
   if (Number(invoice.tax_percent) > 0) {
-    totalsRows.push([`VAT @ ${invoice.tax_percent}%`, formatMoney(invoice.tax_amount)])
+    totalsRows.push([`Tax @ ${invoice.tax_percent}%`, formatMoney(invoice.tax_amount)])
   }
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9.5)

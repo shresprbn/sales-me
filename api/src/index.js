@@ -301,11 +301,15 @@ async function handleListInvoices(env, headers, url) {
 }
 
 // Flat feed of every line item ever billed, with the parent invoice's
-// status/date embedded — lets the frontend build a per-product sales
-// breakdown without an N+1 fetch per invoice.
+// status/date/subtotal/discount embedded — lets the frontend build a
+// per-product sales breakdown (and prorate each invoice's discount across
+// its items for profit calculations) without an N+1 fetch per invoice.
+// variant_id must be selected explicitly (PostgREST omits it otherwise) —
+// without it, Stats can't join back to a variant's cost/category at all, so
+// profit silently came out as zero for every sale.
 async function handleListInvoiceItems(env, headers) {
   const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/invoice_items?select=product_name,variant_label,unit,unit_price,qty,line_total,invoices(status,created_at)`,
+    `${env.SUPABASE_URL}/rest/v1/invoice_items?select=variant_id,product_name,variant_label,unit,unit_price,qty,line_total,invoices(status,created_at,subtotal,discount_amount)`,
     { headers: supabaseHeaders(env) },
   )
   if (!res.ok) return json({ error: 'Could not load invoice items' }, 502, headers)

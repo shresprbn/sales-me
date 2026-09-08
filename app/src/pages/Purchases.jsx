@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatMoney } from '../lib/currency'
-import { qtyPresets } from '../lib/qtyPresets'
-import { UNITS } from '../lib/units'
 
 const PAGE_SIZE = 20
 
@@ -11,38 +10,16 @@ function formatDate(iso) {
 }
 
 export default function Purchases() {
+  const navigate = useNavigate()
   const [purchases, setPurchases] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [products, setProducts] = useState([])
   const [status, setStatus] = useState('loading')
-
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [search, setSearch] = useState('')
-  const [expandedGroups, setExpandedGroups] = useState(() => new Set())
-  const [pendingVariant, setPendingVariant] = useState(null)
-  const [supplier, setSupplier] = useState('')
-  const [qty, setQty] = useState('')
-  const [costPrice, setCostPrice] = useState('')
-  const [sellPrice, setSellPrice] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState('cash')
-  const [amountPaid, setAmountPaid] = useState('')
-  const [notes, setNotes] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [formError, setFormError] = useState('')
 
   const [payModalOpen, setPayModalOpen] = useState(null) // purchase row being paid down, or null
   const [payAmount, setPayAmount] = useState('')
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState('')
-
-  const [newProductModalOpen, setNewProductModalOpen] = useState(false)
-  const [newProductName, setNewProductName] = useState('')
-  const [newVariantLabel, setNewVariantLabel] = useState('')
-  const [newUnit, setNewUnit] = useState('pcs')
-  const [newSellPrice, setNewSellPrice] = useState('')
-  const [creatingProduct, setCreatingProduct] = useState(false)
-  const [newProductError, setNewProductError] = useState('')
 
   const loadPage = (p) => {
     setStatus('loading')
@@ -57,175 +34,9 @@ export default function Purchases() {
       .catch(() => setStatus('error'))
   }
 
-  const loadProducts = () => {
-    api.listProducts({ all: true }).then(({ rows }) => setProducts(rows)).catch(() => {})
-  }
-
-  const reload = (p = page) => {
-    loadPage(p)
-    loadProducts()
-  }
-
-  useEffect(() => reload(1), [])
+  useEffect(() => loadPage(1), [])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-
-  const allVariants = useMemo(() => {
-    const rows = []
-    for (const product of products) {
-      for (const v of product.product_variants || []) {
-        rows.push({
-          variantId: v.id,
-          productName: product.name,
-          variantLabel: v.variant_label,
-          unit: v.unit || 'pcs',
-          purchasePrice: Number(v.purchase_price) || 0,
-          unitPrice: Number(v.unit_price) || 0,
-        })
-      }
-    }
-    return rows
-  }, [products])
-
-  const filteredVariants = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return allVariants
-    return allVariants.filter(
-      (v) => v.productName.toLowerCase().includes(q) || v.variantLabel.toLowerCase().includes(q),
-    )
-  }, [allVariants, search])
-
-  const groupedVariants = useMemo(() => {
-    const groups = []
-    const byName = new Map()
-    for (const v of filteredVariants) {
-      let group = byName.get(v.productName)
-      if (!group) {
-        group = { productName: v.productName, variants: [] }
-        byName.set(v.productName, group)
-        groups.push(group)
-      }
-      group.variants.push(v)
-    }
-    return groups
-  }, [filteredVariants])
-
-  const toggleGroup = (productName) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(productName)) next.delete(productName)
-      else next.add(productName)
-      return next
-    })
-  }
-
-  const openDetail = (variant) => {
-    setPickerOpen(false)
-    setSearch('')
-    setExpandedGroups(new Set())
-    setPendingVariant(variant)
-    setSupplier('')
-    setQty('')
-    setCostPrice(variant.purchasePrice ? String(variant.purchasePrice) : '')
-    setSellPrice(variant.unitPrice ? String(variant.unitPrice) : '')
-    setPaymentMethod('cash')
-    setAmountPaid('')
-    setNotes('')
-    setFormError('')
-  }
-
-  const openNewProductModal = () => {
-    setPickerOpen(false)
-    setNewProductName(search.trim())
-    setNewVariantLabel('')
-    setNewUnit('pcs')
-    setNewSellPrice('')
-    setNewProductError('')
-    setNewProductModalOpen(true)
-  }
-
-  const handleCreateNewProduct = async (e) => {
-    e.preventDefault()
-    const name = newProductName.trim()
-    const variantLabel = newVariantLabel.trim()
-    const sellPrice = Number(newSellPrice)
-    if (!name || !variantLabel) {
-      setNewProductError('Product name and variant are both required')
-      return
-    }
-    if (!Number.isFinite(sellPrice) || sellPrice < 0) {
-      setNewProductError('Enter a valid sell price')
-      return
-    }
-    setCreatingProduct(true)
-    setNewProductError('')
-    try {
-      const product = await api.createProduct({
-        name,
-        category: '',
-        description: '',
-        variants: [{ variantLabel, unit: newUnit, purchasePrice: 0, unitPrice: sellPrice, stockQty: 0, lowStockThreshold: 0 }],
-      })
-      const variant = (product.product_variants || [])[0]
-      loadProducts()
-      setNewProductModalOpen(false)
-      if (variant) {
-        openDetail({
-          variantId: variant.id,
-          productName: product.name,
-          variantLabel: variant.variant_label,
-          unit: variant.unit || 'pcs',
-          purchasePrice: 0,
-          unitPrice: Number(variant.unit_price) || 0,
-        })
-      }
-    } catch (err) {
-      setNewProductError(err.message || 'Could not create product')
-    } finally {
-      setCreatingProduct(false)
-    }
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    const qtyNum = Number(qty)
-    const costNum = Number(costPrice)
-    if (!qtyNum || qtyNum <= 0) {
-      setFormError('Enter a valid quantity')
-      return
-    }
-    if (!Number.isFinite(costNum) || costNum < 0) {
-      setFormError('Enter a valid cost price')
-      return
-    }
-    const sellNum = sellPrice === '' ? undefined : Number(sellPrice)
-    if (sellNum !== undefined && (!Number.isFinite(sellNum) || sellNum < 0)) {
-      setFormError('Enter a valid sell price, or leave it blank to leave it unchanged')
-      return
-    }
-    setSaving(true)
-    setFormError('')
-    try {
-      await api.createPurchase({
-        variantId: pendingVariant.variantId,
-        productName: pendingVariant.productName,
-        variantLabel: pendingVariant.variantLabel,
-        supplier: supplier.trim(),
-        qty: qtyNum,
-        costPrice: costNum,
-        sellPrice: sellNum,
-        paymentMethod,
-        amountPaid: paymentMethod === 'credit' ? Number(amountPaid) || 0 : undefined,
-        notes: notes.trim(),
-      })
-      setPendingVariant(null)
-      reload()
-    } catch (err) {
-      setFormError(err.message || 'Could not record purchase')
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const openPayModal = (purchase) => {
     setPayModalOpen(purchase)
@@ -245,7 +56,7 @@ export default function Purchases() {
     try {
       await api.recordPurchasePayment(payModalOpen.id, amount)
       setPayModalOpen(null)
-      reload()
+      loadPage(page)
     } catch (err) {
       setPayError(err.message || 'Could not record payment')
     } finally {
@@ -260,7 +71,7 @@ export default function Purchases() {
           <h1 className="page-title">Purchases</h1>
           <p className="page-subtitle">Stock bought from suppliers — adds straight to inventory.</p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => setPickerOpen(true)}>
+        <button type="button" className="btn btn-primary" onClick={() => navigate('/purchases/new')}>
           + record purchase
         </button>
       </div>
@@ -324,216 +135,6 @@ export default function Purchases() {
             </div>
           )}
         </>
-      )}
-
-      {pickerOpen && (
-        <div className="modal-overlay" onClick={() => setPickerOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="modal-title">Record purchase</h2>
-            <input
-              type="text"
-              autoFocus
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="search products…"
-              style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 11px', marginBottom: 12 }}
-            />
-            {groupedVariants.length === 0 && <p className="empty-state">no matching items</p>}
-            <button type="button" className="btn-link" onClick={openNewProductModal} style={{ marginBottom: 12 }}>
-              + new product{search.trim() ? ` "${search.trim()}"` : ''}
-            </button>
-            {groupedVariants.length > 0 && (
-              <div className="picker-groups">
-                {groupedVariants.map((group) => {
-                  const expanded = expandedGroups.has(group.productName)
-                  return (
-                    <div className="picker-group" key={group.productName}>
-                      <button
-                        type="button"
-                        className={`picker-group-title accordion-toggle${expanded ? ' expanded' : ''}`}
-                        onClick={() => toggleGroup(group.productName)}
-                      >
-                        <span>{group.productName}</span>
-                        <span className="accordion-caret">{expanded ? '▾' : '▸'}</span>
-                      </button>
-                      {expanded && (
-                        <div className="picker-list">
-                          {group.variants.map((v) => (
-                            <div className="picker-item" key={v.variantId} onClick={() => openDetail(v)}>
-                              <span>{v.variantLabel}</span>
-                              <span className="picker-item-meta">last cost {formatMoney(v.purchasePrice)}/{v.unit}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-            <div className="modal-actions">
-              <button type="button" className="btn" onClick={() => setPickerOpen(false)}>close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {pendingVariant && (
-        <div className="modal-overlay" onClick={() => !saving && setPendingVariant(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="modal-title">{pendingVariant.productName} — {pendingVariant.variantLabel}</h2>
-            <form onSubmit={handleSubmit}>
-              <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Quick amounts</label>
-              <div className="qty-presets">
-                {qtyPresets(pendingVariant.unit).map((p) => (
-                  <button
-                    type="button"
-                    key={p.label}
-                    className="btn btn-sm"
-                    onClick={() => setQty(String(Math.round(((Number(qty) || 0) + p.value) * 1000) / 1000))}
-                  >
-                    +{p.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="field-row" style={{ marginTop: 12 }}>
-                <div className="field">
-                  <label>Quantity ({pendingVariant.unit})</label>
-                  <input type="number" min="0.001" step="any" autoFocus value={qty} onChange={(e) => setQty(e.target.value)} />
-                </div>
-                <div className="field">
-                  <label>Cost price (per {pendingVariant.unit})</label>
-                  <input type="number" min="0" step="0.01" value={costPrice} onChange={(e) => setCostPrice(e.target.value)} />
-                </div>
-              </div>
-              <div className="field">
-                <label>Sell price (per {pendingVariant.unit}) — updates inventory</label>
-                <input type="number" min="0" step="0.01" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Payment</label>
-                <div className="unit-toggle payment-toggle">
-                  {['cash', 'bank', 'credit'].map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      className={paymentMethod === m ? 'active' : ''}
-                      onClick={() => setPaymentMethod(m)}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {paymentMethod === 'credit' && (
-                <div className="field">
-                  <label>Paid now (optional — rest stays as credit)</label>
-                  <input type="number" min="0" step="0.01" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} placeholder="0" />
-                  {Number(qty) > 0 && Number(costPrice) >= 0 && (
-                    <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0 0' }}>
-                      Balance due: {formatMoney(Math.max(0, Number(qty) * Number(costPrice) - (Number(amountPaid) || 0)))}
-                    </p>
-                  )}
-                </div>
-              )}
-              <div className="field">
-                <label>Supplier (optional)</label>
-                <input type="text" value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. ABC Traders" />
-              </div>
-              <div className="field">
-                <label>Notes (optional)</label>
-                <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
-              </div>
-
-              {Number(qty) > 0 && Number(costPrice) >= 0 && (
-                <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  Total cost: {formatMoney(Number(qty) * Number(costPrice))}
-                </p>
-              )}
-
-              {formError && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{formError}</p>}
-
-              <div className="modal-actions">
-                <button type="button" className="btn" onClick={() => setPendingVariant(null)} disabled={saving}>cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? 'saving…' : 'record purchase'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {newProductModalOpen && (
-        <div className="modal-overlay" onClick={() => !creatingProduct && setNewProductModalOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="modal-title">New product</h2>
-            <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: -10, marginBottom: 16 }}>
-              A minimal entry to get this into inventory — edit category, SKU, etc. later from Inventory.
-            </p>
-            <form onSubmit={handleCreateNewProduct}>
-              <div className="field">
-                <label>Product name</label>
-                <input
-                  type="text"
-                  autoFocus
-                  value={newProductName}
-                  onChange={(e) => setNewProductName(e.target.value)}
-                  placeholder="e.g. Fevicol"
-                />
-              </div>
-              <div className="field-row">
-                <div className="field">
-                  <label>Variant</label>
-                  <input
-                    type="text"
-                    value={newVariantLabel}
-                    onChange={(e) => setNewVariantLabel(e.target.value)}
-                    placeholder="e.g. 1kg"
-                  />
-                </div>
-                <div className="field">
-                  <label>Sell price</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={newSellPrice}
-                    onChange={(e) => setNewSellPrice(e.target.value)}
-                    placeholder={`price/${newUnit}`}
-                  />
-                </div>
-              </div>
-              <div className="field">
-                <label>Unit</label>
-                <div className="unit-toggle">
-                  {UNITS.map((u) => (
-                    <button
-                      key={u}
-                      type="button"
-                      className={newUnit === u ? 'active' : ''}
-                      onClick={() => setNewUnit(u)}
-                    >
-                      {u}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {newProductError && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{newProductError}</p>}
-
-              <div className="modal-actions">
-                <button type="button" className="btn" onClick={() => setNewProductModalOpen(false)} disabled={creatingProduct}>
-                  cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={creatingProduct}>
-                  {creatingProduct ? 'creating…' : 'create & continue'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
       )}
 
       {payModalOpen && (
