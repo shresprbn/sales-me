@@ -34,6 +34,7 @@ export default function NewPurchase() {
   const [newVariantLabel, setNewVariantLabel] = useState('')
   const [newUnit, setNewUnit] = useState('pcs')
   const [newSellPrice, setNewSellPrice] = useState('')
+  const [newLowStockThreshold, setNewLowStockThreshold] = useState('')
   const [creatingProduct, setCreatingProduct] = useState(false)
   const [newProductError, setNewProductError] = useState('')
 
@@ -41,6 +42,7 @@ export default function NewPurchase() {
   const [existingVariantLabel, setExistingVariantLabel] = useState('')
   const [existingVariantUnit, setExistingVariantUnit] = useState('pcs')
   const [existingVariantSellPrice, setExistingVariantSellPrice] = useState('')
+  const [existingVariantLowStockThreshold, setExistingVariantLowStockThreshold] = useState('')
   const [creatingVariant, setCreatingVariant] = useState(false)
   const [existingVariantError, setExistingVariantError] = useState('')
 
@@ -163,6 +165,7 @@ export default function NewPurchase() {
     setNewVariantLabel('')
     setNewUnit('pcs')
     setNewSellPrice('')
+    setNewLowStockThreshold('')
     setNewProductError('')
     setNewProductModalOpen(true)
   }
@@ -187,7 +190,9 @@ export default function NewPurchase() {
         name,
         category: '',
         description: '',
-        variants: [{ variantLabel, unit: newUnit, purchasePrice: 0, unitPrice: sellPrice, stockQty: 0, lowStockThreshold: 0 }],
+        variants: [
+          { variantLabel, unit: newUnit, purchasePrice: 0, unitPrice: sellPrice, stockQty: 0, lowStockThreshold: Number(newLowStockThreshold) || 0 },
+        ],
       })
       const variant = (product.product_variants || [])[0]
       loadProducts()
@@ -215,6 +220,7 @@ export default function NewPurchase() {
     setExistingVariantLabel('')
     setExistingVariantUnit('pcs')
     setExistingVariantSellPrice('')
+    setExistingVariantLowStockThreshold('')
     setExistingVariantError('')
     setNewVariantModalOpen({ productId: group.productId, productName: group.productName })
   }
@@ -238,7 +244,14 @@ export default function NewPurchase() {
       const beforeIds = new Set((before?.product_variants || []).map((v) => v.id))
       const updated = await api.updateProduct(newVariantModalOpen.productId, {
         variants: [
-          { variantLabel, unit: existingVariantUnit, purchasePrice: 0, unitPrice: sellPrice, stockQty: 0, lowStockThreshold: 0 },
+          {
+            variantLabel,
+            unit: existingVariantUnit,
+            purchasePrice: 0,
+            unitPrice: sellPrice,
+            stockQty: 0,
+            lowStockThreshold: Number(existingVariantLowStockThreshold) || 0,
+          },
         ],
       })
       const created = (updated.product_variants || []).find((v) => !beforeIds.has(v.id))
@@ -618,14 +631,27 @@ export default function NewPurchase() {
                   />
                 </div>
               </div>
-              <div className="field">
-                <label>Unit</label>
-                <div className="unit-toggle">
-                  {UNITS.map((u) => (
-                    <button key={u} type="button" className={newUnit === u ? 'active' : ''} onClick={() => setNewUnit(u)}>
-                      {u}
-                    </button>
-                  ))}
+              <div className="field-row">
+                <div className="field">
+                  <label>Unit</label>
+                  <div className="unit-toggle">
+                    {UNITS.map((u) => (
+                      <button key={u} type="button" className={newUnit === u ? 'active' : ''} onClick={() => setNewUnit(u)}>
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="field">
+                  <label>Low stock at (optional)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={newLowStockThreshold}
+                    onChange={(e) => setNewLowStockThreshold(e.target.value)}
+                    placeholder="alert below"
+                  />
                 </div>
               </div>
 
@@ -666,14 +692,27 @@ export default function NewPurchase() {
                   />
                 </div>
               </div>
-              <div className="field">
-                <label>Unit</label>
-                <div className="unit-toggle">
-                  {UNITS.map((u) => (
-                    <button key={u} type="button" className={existingVariantUnit === u ? 'active' : ''} onClick={() => setExistingVariantUnit(u)}>
-                      {u}
-                    </button>
-                  ))}
+              <div className="field-row">
+                <div className="field">
+                  <label>Unit</label>
+                  <div className="unit-toggle">
+                    {UNITS.map((u) => (
+                      <button key={u} type="button" className={existingVariantUnit === u ? 'active' : ''} onClick={() => setExistingVariantUnit(u)}>
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="field">
+                  <label>Low stock at (optional)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={existingVariantLowStockThreshold}
+                    onChange={(e) => setExistingVariantLowStockThreshold(e.target.value)}
+                    placeholder="alert below"
+                  />
                 </div>
               </div>
 
