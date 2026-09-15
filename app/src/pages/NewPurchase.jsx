@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
-import { formatMoney, formatUnitPrice } from '../lib/currency'
+import { formatMoney } from '../lib/currency'
 import { qtyPresets } from '../lib/qtyPresets'
 import { UNITS } from '../lib/units'
 
@@ -20,6 +20,9 @@ export default function NewPurchase() {
 
   const [lineItems, setLineItems] = useState([]) // { key, variantId, productName, variantLabel, unit, qty, costPrice, sellPrice }
   const [supplier, setSupplier] = useState('')
+  const [discountType, setDiscountType] = useState('percent')
+  const [discountValue, setDiscountValue] = useState('0')
+  const [vatPercent, setVatPercent] = useState('0')
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [amountPaid, setAmountPaid] = useState('')
   const [notes, setNotes] = useState('')
@@ -259,7 +262,22 @@ export default function NewPurchase() {
     }
   }
 
-  const totalCost = lineItems.reduce((sum, it) => sum + it.qty * it.costPrice, 0)
+  // Subtotal is the raw sum of what's in the cart; a supplier discount comes
+  // off that, then VAT is charged on the discounted amount — same
+  // subtotal → discount → tax order as the sales invoice. There's no
+  // separate column for any of this on a purchase row, so the discount/VAT
+  // effect gets folded into each item's cost price at submit time (below),
+  // proportional to its share of the subtotal — that keeps a variant's
+  // recorded purchase_price (and profit calculations built on it) equal to
+  // what the item actually ended up costing.
+  const subtotal = lineItems.reduce((sum, it) => sum + it.qty * it.costPrice, 0)
+  const discountValueNum = Math.max(0, Number(discountValue) || 0)
+  const discountAmount =
+    discountType === 'percent' ? subtotal * (Math.min(100, discountValueNum) / 100) : Math.min(discountValueNum, subtotal)
+  const discounted = subtotal - discountAmount
+  const vatPct = Math.max(0, Math.min(100, Number(vatPercent) || 0))
+  const vatAmount = discounted * (vatPct / 100)
+  const totalCost = discounted + vatAmount
   const amountPaidNum = Math.max(0, Math.min(totalCost, Number(amountPaid) || 0))
   const balanceDue = Math.max(0, totalCost - amountPaidNum)
 
@@ -270,6 +288,17 @@ export default function NewPurchase() {
     }
     setSubmitting(true)
     setError('')
+    // Scale every item's cost price by the same discount+VAT ratio so the
+    // sum of what gets saved matches totalCost exactly (down to rounding).
+    const ratio = subtotal > 0 ? totalCost / subtotal : 1
+    const adjustmentNote = []
+    if (discountAmount > 0) {
+      adjustmentNote.push(`discount ${discountType === 'percent' ? `${discountValueNum}%` : formatMoney(discountAmount)}`)
+    }
+    if (vatAmount > 0) adjustmentNote.push(`VAT ${vatPct}%`)
+    const finalNotes = [notes.trim(), adjustmentNote.length ? `(${adjustmentNote.join(', ')} applied to cost)` : '']
+      .filter(Boolean)
+      .join(' — ')
     // Credit payments made "up front" are applied to items in order until the
     // amount is used up (first items get paid off first); cash/bank settle
     // each item in full. Items succeed one at a time so a mid-batch failure
@@ -277,7 +306,8 @@ export default function NewPurchase() {
     let remaining = amountPaidNum
     try {
       for (const it of lineItems) {
-        const itemTotal = Math.round(it.qty * it.costPrice * 100) / 100
+        const effectiveCostPrice = Math.round(it.costPrice * ratio * 100) / 100
+        const itemTotal = Math.round(it.qty * effectiveCostPrice * 100) / 100
         let itemPaid
         if (paymentMethod === 'credit') {
           itemPaid = Math.min(remaining, itemTotal)
@@ -289,11 +319,11 @@ export default function NewPurchase() {
           variantLabel: it.variantLabel,
           supplier: supplier.trim(),
           qty: it.qty,
-          costPrice: it.costPrice,
+          costPrice: effectiveCostPrice,
           sellPrice: it.sellPrice,
           paymentMethod,
           amountPaid: itemPaid,
-          notes: notes.trim(),
+          notes: finalNotes,
         })
         setLineItems((prev) => prev.filter((li) => li.key !== it.key))
       }
@@ -389,6 +419,24 @@ export default function NewPurchase() {
         <div className="invoice-side">
           <div className="card">
             <div className="field">
+              <label>Discount from supplier</label>
+              <div className="discount-row">
+                <div className="unit-toggle discount-type-toggle">
+                  <button type="button" className={discountType === 'percent' ? 'active' : ''} onClick={() => setDiscountType('percent')}>
+                    %
+                  </button>
+                  <button type="button" className={discountType === 'flat' ? 'active' : ''} onClick={() => setDiscountType('flat')}>
+                    Rs.
+                  </button>
+                </div>
+                <input type="number" min="0" step="0.01" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} />
+              </div>
+            </div>
+            <div className="field">
+              <label>VAT % on cost (optional)</label>
+              <input type="number" min="0" max="100" step="0.01" value={vatPercent} onChange={(e) => setVatPercent(e.target.value)} />
+            </div>
+            <div className="field">
               <label>Payment</label>
               <div className="unit-toggle payment-toggle">
                 {['cash', 'bank', 'credit'].map((m) => (
@@ -409,7 +457,12 @@ export default function NewPurchase() {
               <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
 
-            <div className="totals-row"><span>Total cost</span><span>{formatMoney(totalCost)}</span></div>
+            <div className="totals-row"><span>Subtotal</span><span>{formatMoney(subtotal)}</span></div>
+            {discountAmount > 0 && (
+              <div className="totals-row"><span>Discount</span><span>-{formatMoney(discountAmount)}</span></div>
+            )}
+            {vatAmount > 0 && <div className="totals-row"><span>VAT ({vatPct}%)</span><span>{formatMoney(vatAmount)}</span></div>}
+            <div className="totals-row total"><span>Total cost</span><span>{formatMoney(totalCost)}</span></div>
             {paymentMethod === 'credit' && (
               <div className="totals-row total"><span>Balance due</span><span>{formatMoney(balanceDue)}</span></div>
             )}
